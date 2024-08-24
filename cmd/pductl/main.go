@@ -96,6 +96,13 @@ var (
 		RunE:  outletLock,
 		Args:  cobra.ExactArgs(2),
 	}
+
+	outletStatusCmd = &cobra.Command{
+		Use:   "status OUTLET",
+		Short: "Get status of outlet",
+		RunE:  outletStatus,
+		Args:  cobra.ExactArgs(1),
+	}
 )
 
 func init() {
@@ -111,6 +118,7 @@ func init() {
 	outletCmd.AddCommand(outletLockCmd)
 	outletCmd.AddCommand(outletRebootCmd)
 	outletCmd.AddCommand(outletSwitchCmd)
+	outletCmd.AddCommand(outletStatusCmd)
 
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		p = pdu.NewPDU(address, username, password)
@@ -238,6 +246,33 @@ func outletLock(_ *cobra.Command, args []string) error {
 	if err := p.LockOutlet(id, state); err != nil {
 		return fmt.Errorf("Failed to control outlet: %w", err)
 	}
+
+	return nil
+}
+
+func outletStatus(_ *cobra.Command, args []string) error {
+	id, err := getOutletID(args[0])
+	if err != nil {
+		return err
+	}
+
+	outlets, err := p.StatusOutlets()
+	if err != nil {
+		return fmt.Errorf("Failed to control outlet: %w", err)
+	}
+
+	var out any
+	if id == pdu.All {
+		out = outlets
+	} else if id < 1 || id > len(outlets) {
+		return fmt.Errorf("invalid outlet number: %d", id)
+	} else {
+		out = outlets[id-1]
+	}
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "   ")
+	enc.Encode(out)
 
 	return nil
 }

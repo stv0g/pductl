@@ -86,7 +86,7 @@ type Status struct {
 	Switches    []bool          `json:"switches"`
 	Breakers    []BreakerStatus `json:"breakers"`
 	Groups      []GroupStatus   `json:"groups"`
-	Outlet      []OutletStatus  `json:"outlets"`
+	Outlets     []OutletStatus  `json:"outlets"`
 }
 
 func NewPDU(address string, username, password string) *PDU {
@@ -240,13 +240,24 @@ func (p *PDU) Status() (Status, error) {
 		sts.Groups = append(sts.Groups, group)
 	}
 
-	if out, err = p.execute("OStatus"); err != nil {
+	if sts.Outlets, err = p.StatusOutlets(); err != nil {
 		return sts, err
 	}
 
-	n = reOStatusOutlet.FindAllStringSubmatch(out, -1)
+	return sts, nil
+}
+
+func (p *PDU) StatusOutlets() ([]OutletStatus, error) {
+	outlets := []OutletStatus{}
+
+	out, err := p.execute("OStatus")
+	if err != nil {
+		return nil, err
+	}
+
+	n := reOStatusOutlet.FindAllStringSubmatch(out, -1)
 	if n == nil {
-		return sts, fmt.Errorf("%w: groups", ErrDecode)
+		return nil, fmt.Errorf("%w: groups", ErrDecode)
 	}
 
 	for _, o := range n {
@@ -257,29 +268,29 @@ func (p *PDU) Status() (Status, error) {
 		}
 
 		if outlet.TrueRMSCurrent, err = strconv.ParseFloat(o[2], 64); err != nil {
-			return sts, fmt.Errorf("%w group current: %w", ErrDecode, err)
+			return nil, fmt.Errorf("%w group current: %w", ErrDecode, err)
 		}
 
 		if outlet.PeakRMSCurrent, err = strconv.ParseFloat(o[3], 64); err != nil {
-			return sts, fmt.Errorf("%w group peak current: %w", ErrDecode, err)
+			return nil, fmt.Errorf("%w group peak current: %w", ErrDecode, err)
 		}
 
 		if outlet.TrueRMSVoltage, err = strconv.ParseFloat(o[4], 64); err != nil {
-			return sts, fmt.Errorf("%w group voltage: %w", ErrDecode, err)
+			return nil, fmt.Errorf("%w group voltage: %w", ErrDecode, err)
 		}
 
 		if outlet.AveragePower, err = strconv.ParseFloat(o[5], 64); err != nil {
-			return sts, fmt.Errorf("%w group average power: %w", ErrDecode, err)
+			return nil, fmt.Errorf("%w group average power: %w", ErrDecode, err)
 		}
 
 		if outlet.VoltAmps, err = strconv.ParseFloat(o[6], 64); err != nil {
-			return sts, fmt.Errorf("%w group VA: %w", ErrDecode, err)
+			return nil, fmt.Errorf("%w group VA: %w", ErrDecode, err)
 		}
 
-		sts.Outlet = append(sts.Outlet, outlet)
+		outlets = append(outlets, outlet)
 	}
 
-	return sts, nil
+	return outlets, nil
 }
 
 func (p *PDU) ClearMaximumCurrents() error {
