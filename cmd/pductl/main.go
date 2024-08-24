@@ -143,12 +143,23 @@ func getOutletID(arg string) (int, error) {
 		return pdu.All, nil
 	}
 
-	id, err := strconv.ParseInt(arg, 0, 64)
-	if err != nil {
-		return -1, fmt.Errorf("failed to parse outlet number: %w", err)
+	if id, err := strconv.ParseInt(arg, 0, 64); err == nil {
+		return int(id), nil
 	}
 
-	return int(id), nil
+	// Attempt to lookup outlet by name
+	outlets, err := p.StatusOutlets()
+	if err != nil {
+		return -1, fmt.Errorf("failed to get outlets from PDU: %w", err)
+	}
+
+	for i, outlet := range outlets {
+		if outlet.Name == arg {
+			return i + 1, nil
+		}
+	}
+
+	return -1, fmt.Errorf("failed to find outlet %s", arg)
 }
 
 func getOutletIDandState(arg1, arg2 string) (id int, state bool, err error) {
