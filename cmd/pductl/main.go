@@ -79,21 +79,21 @@ var (
 	outletRebootCmd = &cobra.Command{
 		Use:   "reboot OUTLET",
 		Short: "Reboot an outlet",
-		RunE:  rebootOutlet,
+		RunE:  outletReboot,
 		Args:  cobra.ExactArgs(1),
 	}
 
 	outletSwitchCmd = &cobra.Command{
 		Use:   "switch OUTLET STATE",
 		Short: "Switch an outlet on/off",
-		RunE:  switchOutlet,
+		RunE:  outletSwitch,
 		Args:  cobra.ExactArgs(2),
 	}
 
 	outletLockCmd = &cobra.Command{
 		Use:   "lock OUTLET STATE",
 		Short: "Lock or unlock an outlet",
-		RunE:  lockOutlet,
+		RunE:  outletLock,
 		Args:  cobra.ExactArgs(2),
 	}
 )
@@ -203,7 +203,7 @@ func clearMaximumCurrent(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func rebootOutlet(_ *cobra.Command, args []string) error {
+func outletReboot(_ *cobra.Command, args []string) error {
 	id, err := getOutletID(args[0])
 	if err != nil {
 		return err
@@ -216,7 +216,7 @@ func rebootOutlet(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func switchOutlet(_ *cobra.Command, args []string) error {
+func outletSwitch(_ *cobra.Command, args []string) error {
 	id, state, err := getOutletIDandState(args[0], args[1])
 	if err != nil {
 		return err
@@ -229,7 +229,7 @@ func switchOutlet(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func lockOutlet(_ *cobra.Command, args []string) error {
+func outletLock(_ *cobra.Command, args []string) error {
 	id, state, err := getOutletIDandState(args[0], args[1])
 	if err != nil {
 		return err
