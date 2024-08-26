@@ -6,7 +6,6 @@ package pductl
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"net"
 	"os"
 	"regexp"
@@ -52,6 +51,7 @@ type PDU struct {
 
 type BreakerStatus struct {
 	Name string `json:"name"`
+	ID   int    `json:"id"`
 
 	TrueRMSCurrent float64 `json:"true_rms_current"`
 	PeakRMSCurrent float64 `json:"peak_rms_current"`
@@ -59,6 +59,9 @@ type BreakerStatus struct {
 
 type GroupStatus struct {
 	Name string `json:"name"`
+
+	ID        int `json:"id"`
+	BreakerID int `json:"breaker_id"`
 
 	TrueRMSCurrent float64 `json:"true_rms_current"`
 	PeakRMSCurrent float64 `json:"peak_rms_current"`
@@ -68,7 +71,10 @@ type GroupStatus struct {
 }
 
 type OutletStatus struct {
-	Name string `json:"name"`
+	Name      string `json:"name"`
+	ID        int    `json:"id"`
+	GroupID   int    `json:"group_id"`
+	BreakerID int    `json:"breaker_id"`
 
 	State  bool `json:"state"`
 	Locked bool `json:"locked"`
@@ -89,21 +95,19 @@ type Status struct {
 	Outlets     []OutletStatus  `json:"outlets"`
 }
 
-func NewPDU(address string, username, password string) *PDU {
-	conn, err := net.Dial("tcp", address)
-	if err != nil {
-		slog.Error("Failed to dial", slog.Any("error", err))
-	}
-
-	p := &PDU{
+func NewPDU(address string, username, password string) (p *PDU, err error) {
+	p = &PDU{
 		Username: username,
 		Password: password,
 
-		conn:    conn,
 		timeout: 300 * time.Millisecond,
 	}
 
-	return p
+	if p.conn, err = net.Dial("tcp", address); err != nil {
+		return nil, fmt.Errorf("failed to establish connection: %w", err)
+	}
+
+	return p, nil
 }
 
 func (p *PDU) Close() error {
@@ -191,9 +195,10 @@ func (p *PDU) Status() (Status, error) {
 		return sts, fmt.Errorf("%w: breakers", ErrDecode)
 	}
 
-	for _, b := range n {
+	for i, b := range n {
 		breaker := BreakerStatus{
 			Name: b[1],
+			ID:   i,
 		}
 
 		if breaker.TrueRMSCurrent, err = strconv.ParseFloat(b[2], 64); err != nil {
@@ -212,9 +217,17 @@ func (p *PDU) Status() (Status, error) {
 		return sts, fmt.Errorf("%w: groups", ErrDecode)
 	}
 
-	for _, g := range n {
+	for i, g := range n {
 		group := GroupStatus{
 			Name: g[1],
+			ID:   i + 1,
+		}
+
+		switch group.ID {
+		case 1, 2:
+			group.BreakerID = 1
+		case 3, 4:
+			group.BreakerID = 2
 		}
 
 		if group.TrueRMSCurrent, err = strconv.ParseFloat(g[2], 64); err != nil {
@@ -260,11 +273,27 @@ func (p *PDU) StatusOutlets() ([]OutletStatus, error) {
 		return nil, fmt.Errorf("%w: groups", ErrDecode)
 	}
 
-	for _, o := range n {
+	for i, o := range n {
 		outlet := OutletStatus{
 			Name:   o[1],
+			ID:     i + 1,
 			State:  o[7] == "On",
 			Locked: o[8] == "Locked",
+		}
+
+		switch {
+		case 1 <= outlet.ID && outlet.ID <= 5:
+			outlet.BreakerID = 1
+			outlet.GroupID = 1
+		case 6 <= outlet.ID && outlet.ID <= 10:
+			outlet.BreakerID = 1
+			outlet.GroupID = 2
+		case 11 <= outlet.ID && outlet.ID <= 15:
+			outlet.BreakerID = 2
+			outlet.GroupID = 3
+		case 16 <= outlet.ID && outlet.ID <= 20:
+			outlet.BreakerID = 2
+			outlet.GroupID = 4
 		}
 
 		if outlet.TrueRMSCurrent, err = strconv.ParseFloat(o[2], 64); err != nil {

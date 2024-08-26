@@ -22,14 +22,23 @@ var (
 	address  string
 	username string
 	password string
-	outlet   string
-	outletID int
 
 	// Commands
 	rootCmd = &cobra.Command{
 		Use:               "pductl",
 		Short:             "A command line utility, REST API and Prometheus Exporter for Baytech PDUs",
 		DisableAutoGenTag: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
+			p, err = pdu.NewPDU(address, username, password)
+			return err
+		},
+		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			if err := p.Close(); err != nil {
+				return fmt.Errorf("Failed to close PDU: %w", err)
+			}
+
+			return nil
+		},
 	}
 
 	genDocs = &cobra.Command{
@@ -120,19 +129,7 @@ func init() {
 	outletCmd.AddCommand(outletSwitchCmd)
 	outletCmd.AddCommand(outletStatusCmd)
 
-	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		p = pdu.NewPDU(address, username, password)
-	}
-	rootCmd.PersistentPostRunE = func(cmd *cobra.Command, args []string) error {
-		if err := p.Close(); err != nil {
-			return fmt.Errorf("Failed to close PDF: %w", err)
-		}
-
-		return nil
-	}
-
 	pf := rootCmd.PersistentFlags()
-
 	pf.StringVar(&address, "address", "10.208.1.1:4141", "Address of TCP socket for PDU communication")
 	pf.StringVar(&username, "username", "admin", "Username")
 	pf.StringVar(&password, "password", "admin", "password")

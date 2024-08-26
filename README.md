@@ -15,7 +15,6 @@ Please see [`pductl(3)`](./docs/pductl.md).
 ## Roadmap
 
 - Direct support for serial devices (rather than networked console ports)
-- Prometheus metrics
 - REST API
 
 ## Authors

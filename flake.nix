@@ -30,7 +30,7 @@
             pname = "pductl";
             version = "0.1.0";
             src = ./.;
-            vendorHash = "sha256-4YayHRKsXFrs7S8ugA8Sh7uN4yVYXYCcNi4896DQdIg=";
+            vendorHash = "sha256-bFNknWOwZXt+nS2+kqVWCMp+AvoL/i0/oguphFUHSw0=";
           };
 
           default = pductl;
