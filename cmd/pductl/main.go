@@ -6,17 +6,17 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"os"
 	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 	pdu "github.com/stv0g/pductl"
+	"github.com/stv0g/pductl/baytech"
 )
 
 var (
-	p *pdu.PDU
+	p *baytech.PDU
 
 	// Flags
 	address  string
@@ -29,7 +29,7 @@ var (
 		Short:             "A command line utility, REST API and Prometheus Exporter for Baytech PDUs",
 		DisableAutoGenTag: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			p, err = pdu.NewPDU(address, username, password)
+			p, err = baytech.NewPDU(address, username, password)
 			return err
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
@@ -46,7 +46,10 @@ var (
 		Short:  "Generate docs",
 		Hidden: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			os.MkdirAll("./docs", 0o755)
+			if err := os.MkdirAll("./docs", 0o755); err != nil {
+				return err
+			}
+
 			return doc.GenMarkdownTree(rootCmd, "./docs")
 		},
 	}
@@ -184,9 +187,8 @@ func getStatus(_ *cobra.Command, _ []string) error {
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "   ")
-	enc.Encode(sts)
 
-	return nil
+	return enc.Encode(sts)
 }
 
 func whoami(_ *cobra.Command, _ []string) error {
@@ -213,7 +215,7 @@ func readTemp(_ *cobra.Command, _ []string) error {
 
 func clearMaximumCurrent(_ *cobra.Command, _ []string) error {
 	if err := p.ClearMaximumCurrents(); err != nil {
-		slog.Error("Failed to clear maximum current", err)
+		return fmt.Errorf("Failed to clear maximum current: %w", err)
 	}
 
 	return nil
@@ -280,11 +282,12 @@ func outletStatus(_ *cobra.Command, args []string) error {
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "   ")
-	enc.Encode(out)
 
-	return nil
+	return enc.Encode(out)
 }
 
 func main() {
-	rootCmd.Execute()
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(-1)
+	}
 }

@@ -10,10 +10,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
 	pdu "github.com/stv0g/pductl"
+	"github.com/stv0g/pductl/baytech"
 )
 
 var (
-	p *pdu.PDU
+	p pdu.PDU
 
 	// Flags
 	address  string
@@ -31,7 +32,16 @@ var (
 		PreRunE:           setupMetrics,
 		RunE:              daemon,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			p, err = pdu.NewPDU(address, username, password)
+			q, err := baytech.NewPDU(address, username, password)
+			if err != nil {
+				return err
+			}
+
+			p = &pdu.Cached{
+				PDU: q,
+				TTL: time.Minute,
+			}
+
 			return err
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
@@ -58,40 +68,16 @@ var opsProcessed = promauto.NewCounter(prometheus.CounterOpts{
 	Help: "The total number of processed events",
 })
 
-var (
-	lastUpdate time.Time
-	lastStatus *pdu.Status
-)
-
-func cachedStatus() (*pdu.Status, error) {
-	ttl := 1 * time.Minute
-	now := time.Now()
-
-	if lastUpdate.Add(ttl).Before(now) {
-		fmt.Println("Fetching status")
-		s, err := p.Status()
-		if err != nil {
-			return nil, err
-		}
-
-		lastStatus = &s
-		lastUpdate = now
-		fmt.Println("Fetched status")
-	}
-
-	return lastStatus, nil
-}
-
 func withStatus(cb func(sts *pdu.Status) float64) func() float64 {
 	return func() float64 {
-		sts, _ := cachedStatus()
+		sts, _ := p.Status()
 		return cb(sts)
 	}
 }
 
 func withBoolStatus(cb func(sts *pdu.Status) bool) func() float64 {
 	return func() float64 {
-		sts, _ := cachedStatus()
+		sts, _ := p.Status()
 		if cb(sts) {
 			return 1
 		} else {
@@ -101,7 +87,7 @@ func withBoolStatus(cb func(sts *pdu.Status) bool) func() float64 {
 }
 
 func setupMetrics(_ *cobra.Command, _ []string) error {
-	sts, err := cachedStatus()
+	sts, err := p.Status()
 	if err != nil {
 		return fmt.Errorf("failed to get PDU status")
 	}
