@@ -1,0 +1,391 @@
+# SPDX-FileCopyrightText: 2024 Steffen Vogel <post@steffenvogel.de>
+# SPDX-License-Identifier: Apache-2.0
+
+openapi: 3.0.1
+tags:
+  - name: outlet
+info:
+  title: pductl
+  description: |
+    A little Go tool to control and monitor Baytech PDUs via the serial console port.
+  version: 0.1.0
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+- url: /v1
+paths:
+  /status:
+    get:
+      summary: Get status of PDU
+      operationId: status
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Status'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /status/outlets:
+    get:
+      summary: Get status of PDU outlets
+      operationId: status-outlet-all
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OutletStatus'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+          
+  /temperature:
+    get:
+      summary: Get temperature of PDU
+      operationId: temperature
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [temperature]
+                properties:
+                  temperature:
+                    type: number
+                    description: "Temperature [C]"
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /whoami:
+    get:
+      summary: Get name of current user
+      operationId: who-am-i
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [username]
+                properties:
+                  username:
+                    type: string
+                    description: The username of the current user
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /clear:
+    post:
+      summary: Clear peak RMS current
+      operationId: clear-maximum-currents
+      responses:
+        200:
+          $ref: '#/components/responses/Success'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /outlet/{id}/status:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    get:
+      tags:
+      - outlet
+      summary: Switch state of outlet
+      operationId: status-outlet
+      responses:
+        200:
+          description: Successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OutletStatus'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /outlet/{id}/state:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      tags:
+      - outlet
+      summary: Switch state of outlet
+      operationId: switch-outlet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: boolean
+      responses:
+        200:
+          $ref: '#/components/responses/Success'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /outlet/{id}/lock:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      tags:
+      - outlet
+      summary: Switch lock state of outlet
+      operationId: lock-outlet
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: boolean
+      responses:
+        200:
+          $ref: '#/components/responses/Success'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+  /outlet/{id}/reboot:
+    parameters:
+      - $ref: '#/components/parameters/id'
+    post:
+      tags:
+      - outlet
+      summary: Reboot the outlet
+      operationId: reboot-outlet
+      responses:
+        200:
+          $ref: '#/components/responses/Success'
+        400:
+          $ref: '#/components/responses/BadRequest'
+        401:
+          $ref: '#/components/responses/Unauthorized'
+        403:
+          $ref: '#/components/responses/Forbidden'
+        404:
+          $ref: '#/components/responses/NotFound'
+        500:
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  responses:
+    Success:
+      description: Success
+
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+
+    InternalServerError:
+      description: Internal Server Error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiResponse'
+
+  parameters:
+    id:
+      name: id
+      in: path
+      description: Outlet ID
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    Status:
+      type: object
+      required: [temp, total_kwh, breakers, groups, outlets, switches]
+      properties:
+        temp:
+          description: "Temperature [C]"
+          type: number
+        total_kwh:
+          description: "Total energy [kWh]"
+          type: number
+
+        breakers:
+          type: array
+          items:
+            $ref: '#/components/schemas/BreakerStatus'
+
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/GroupStatus'
+
+        outlets:
+          type: array
+          items:
+            $ref: '#/components/schemas/OutletStatus'
+
+        switches:
+          type: array
+          items:
+            type: boolean
+
+    BreakerStatus:
+      type: object
+      properties:
+        name:
+          type: string
+        id:
+          x-go-name: ID
+          type: integer
+        true_rms_current:
+          x-go-name: TrueRMSCurrent
+          type: number
+        peak_rms_current:
+          x-go-name: PeakRMSCurrent
+          type: number
+      required: [name, id, true_rms_current, peak_rms_current]
+
+    GroupStatus:
+      allOf:
+      - type: object
+        properties:
+          name:
+            type: string
+          id:
+            x-go-name: ID
+            type: integer
+          breaker_id:
+            x-go-name: BreakerID
+            type: integer
+        required: [name, id, breaker_id]
+      - $ref: '#/components/schemas/Measurements'
+
+    OutletStatus:
+      allOf:
+      - type: object
+        properties:
+          name:
+            type: string
+          id:
+            type: integer
+            x-go-name: ID
+          breaker_id:
+            type: integer
+            x-go-name: BreakerID
+          group_id:
+            type: integer
+            x-go-name: GroupID
+          state:
+            type: boolean
+          locked:
+            type: boolean
+        required: [name, id, breaker_id, group_id, state, locked]
+      - $ref: '#/components/schemas/Measurements'
+
+    Measurements:
+      type: object
+      properties:
+        true_rms_current:
+          x-go-name: TrueRMSCurrent
+          description: "True RMS current [A]"
+          type: number
+          minimum: 0
+        peak_rms_current:
+          x-go-name: PeakRMSCurrent
+          description: "Peak RMS current [A]"
+          type: number
+          minimum: 0
+        true_rms_voltage:
+          x-go-name: TrueRMSVoltage
+          description: "True RMS voltage [V]"
+          type: number
+          minimum: 0
+        avg_power:
+          x-go-name: AveragePower
+          description: "Average power [W]"
+          type: number
+          minimum: 0
+        va:
+          x-go-name: VoltAmps
+          description: "Volt Amperes [VA]"
+          type: number
+          minimum: 0
+      required: [true_rms_current, peak_rms_current, true_rms_voltage, avg_power, va]
+
+    ApiResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: An optional error message
+        
+  securitySchemes:
+    BasicAuth:
+      type: http
+      scheme: basic
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY

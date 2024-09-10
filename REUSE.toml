@@ -7,7 +7,7 @@ SPDX-PackageSupplier = "Steffen Vogel <post@steffenvogel.de>"
 SPDX-PackageDownloadLocation = "https://github.com/stv0g/pdu-controller"
 
 [[annotations]]
-path = ["go.sum", "flake.lock", "docs/**.md"]
+path = ["go.sum", "*.gen.go", "flake.lock", "docs/**.md"]
 precedence = "aggregate"
 SPDX-FileCopyrightText = "2024 Steffen Vogel <post@steffenvogel.de>"
 SPDX-License-Identifier = "Apache-2.0"
