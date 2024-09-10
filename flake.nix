@@ -14,7 +14,19 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        pkgs = nixpkgs.legacyPackages.${system};
+        overlay = final: prev: {
+          pductl = final.buildGoModule {
+            pname = "pductl";
+            version = "0.1.0";
+            src = ./.;
+            vendorHash = "sha256-RnwlwVwU1O2yYMPtUbyz8Xqv1gIZdKNapNhd9QnLjHk=";
+          };
+        };
+
+        pkgs = import nixpkgs {
+          inherit system;
+          overlays = [ overlay ];
+        };
       in
       {
         devShell = pkgs.mkShell {
@@ -22,18 +34,16 @@
             go
             golangci-lint
             reuse
+            oapi-codegen
           ];
         };
 
-        packages = rec {
-          pductl = pkgs.buildGoModule {
-            pname = "pductl";
-            version = "0.1.0";
-            src = ./.;
-            vendorHash = "sha256-bFNknWOwZXt+nS2+kqVWCMp+AvoL/i0/oguphFUHSw0=";
-          };
+        overlays = {
+          default = overlay;
+        };
 
-          default = pductl;
+        packages = {
+          default = pkgs.pductl;
         };
 
         formatter = nixpkgs.nixfmt-rfc-style;
