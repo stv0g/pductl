@@ -11,7 +11,10 @@
       nixpkgs,
       flake-utils,
     }:
-    flake-utils.lib.eachDefaultSystem (
+    {
+      nixosModules.default = import ./module.nix;
+    }
+    // flake-utils.lib.eachDefaultSystem (
       system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -21,7 +24,6 @@
 
         overlays.default = final: prev: { pductl = final.callPackage ./default.nix { }; };
         packages.default = pkgs.callPackage ./default.nix { };
-        nixosModules.default = import ./module.nix;
 
         formatter = pkgs.nixfmt-rfc-style;
       }
