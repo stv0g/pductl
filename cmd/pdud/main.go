@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -20,18 +19,8 @@ import (
 )
 
 var (
-	p pdu.PDU
-
-	// Flags
-	address  string
-	username string
-	password string
-	listen   string
-	ttl      time.Duration
-
-	tlsCA   string
-	tlsKey  string
-	tlsCert string
+	p   pdu.PDU
+	cfg *pdu.Config
 
 	// Commands
 	rootCmd = &cobra.Command{
@@ -40,40 +29,51 @@ var (
 		DisableAutoGenTag: true,
 		PreRunE:           setupMetrics,
 		RunE:              daemon,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			q, err := baytech.NewPDU(address, username, password)
-			if err != nil {
-				return err
-			}
-
-			p = &pdu.Cached{
-				PDU: q,
-				TTL: ttl,
-			}
-
-			return err
-		},
-		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-			if err := p.Close(); err != nil {
-				return fmt.Errorf("Failed to close PDF: %w", err)
-			}
-
-			return nil
-		},
 	}
 )
 
 func init() {
 	pf := rootCmd.PersistentFlags()
 
-	pf.StringVar(&address, "address", "tcp://10.208.1.1:4141", "Address of TCP socket for PDU communication")
-	pf.StringVar(&username, "username", "admin", "Username")
-	pf.StringVar(&password, "password", "admin", "password")
-	pf.StringVar(&listen, "listen", ":8080", "Address for HTTP listener")
-	pf.StringVar(&tlsCA, "tls-ca", "", "Certificate Authority to validate client certificates against")
-	pf.StringVar(&tlsCert, "tls-cert", "", "Server certificate")
-	pf.StringVar(&tlsKey, "tls-client", "", "Server key")
-	pf.DurationVar(&ttl, "ttl", pdu.DefaultTTL, "Caching time-to-live. 0 disables caching")
+	pf.String("config", "", "Path to YAML-formatted configuration file")
+	pf.String("address", "tcp://10.208.1.1:4141", "Address of TCP socket for PDU communication")
+	pf.String("username", "admin", "Username")
+	pf.String("password", "admin", "password")
+	pf.String("listen", ":8080", "Address for HTTP listener")
+	pf.String("tls-cacert", "", "Certificate Authority to validate client certificates against")
+	pf.String("tls-cert", "", "Server certificate")
+	pf.String("tls-key", "", "Server key")
+	pf.Bool("tls-insecure", false, "Skip verification of client certificates")
+	pf.Duration("ttl", pdu.DefaultTTL, "Caching time-to-live. 0 disables caching")
+
+	rootCmd.PersistentPreRunE = preRun
+	rootCmd.PersistentPostRunE = postRun
+}
+
+func preRun(cmd *cobra.Command, args []string) (err error) {
+	if cfg, err = pdu.ParseConfig(rootCmd.Flags()); err != nil {
+		return fmt.Errorf("failed to parse configuration: %w", err)
+	}
+
+	q, err := baytech.NewPDU(cfg.Address, cfg.Username, cfg.Password)
+	if err != nil {
+		return err
+	}
+
+	p = &pdu.Cached{
+		PDU: q,
+		TTL: cfg.TTL,
+	}
+
+	return err
+}
+
+func postRun(cmd *cobra.Command, args []string) error {
+	if err := p.Close(); err != nil {
+		return fmt.Errorf("Failed to close PDF: %w", err)
+	}
+
+	return nil
 }
 
 func withStatus(cb func(sts *pdu.Status) float64) func() float64 {
@@ -97,7 +97,7 @@ func withBoolStatus(cb func(sts *pdu.Status) bool) func() float64 {
 func setupMetrics(_ *cobra.Command, _ []string) error {
 	sts, err := p.Status()
 	if err != nil {
-		return fmt.Errorf("failed to get PDU status")
+		return fmt.Errorf("failed to get PDU status: %w", err)
 	}
 
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -266,8 +266,8 @@ func daemon(_ *cobra.Command, _ []string) error {
 	r.Handle("/metrics", promhttp.Handler())
 
 	var tc *tls.Config
-	if tlsKey != "" && tlsCert != "" {
-		cer, err := tls.LoadX509KeyPair(tlsCert, tlsKey)
+	if cfg.TLS != nil {
+		cer, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key)
 		if err != nil {
 			return fmt.Errorf("failed to load server key pair: %w", err)
 		}
@@ -282,8 +282,8 @@ func daemon(_ *cobra.Command, _ []string) error {
 			MinVersion: tls.VersionTLS13,
 		}
 
-		if tlsCA != "" {
-			caContents, err := os.ReadFile(tlsCA)
+		if cfg.TLS.CACert != "" {
+			caContents, err := os.ReadFile(cfg.TLS.CACert)
 			if err != nil {
 				return fmt.Errorf("failed to read CA: %w", err)
 			}
@@ -295,7 +295,7 @@ func daemon(_ *cobra.Command, _ []string) error {
 
 	s := &http.Server{
 		Handler:   h,
-		Addr:      listen,
+		Addr:      cfg.Listen,
 		TLSConfig: tc,
 	}
 
