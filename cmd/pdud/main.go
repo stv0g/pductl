@@ -14,6 +14,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
+	"github.com/spf13/cobra/doc"
 	pdu "github.com/stv0g/pductl"
 	"github.com/stv0g/pductl/baytech"
 )
@@ -29,6 +30,19 @@ var (
 		DisableAutoGenTag: true,
 		PreRunE:           setupMetrics,
 		RunE:              daemon,
+	}
+
+	genDocs = &cobra.Command{
+		Use:    "docs",
+		Short:  "Generate docs",
+		Hidden: true,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := os.MkdirAll("./docs", 0o755); err != nil {
+				return err
+			}
+
+			return doc.GenMarkdownTree(rootCmd, "./docs")
+		},
 	}
 )
 
@@ -48,6 +62,8 @@ func init() {
 
 	rootCmd.PersistentPreRunE = preRun
 	rootCmd.PersistentPostRunE = postRun
+
+	rootCmd.AddCommand(genDocs)
 }
 
 func preRun(cmd *cobra.Command, args []string) (err error) {
