@@ -274,15 +274,15 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 
 func daemon(_ *cobra.Command, _ []string) error {
 	r := http.NewServeMux()
-	si := pdu.NewStrictHandler(&pdu.Server{
-		PDU: p,
-	}, nil)
-	h := pdu.HandlerWithOptions(si, pdu.StdHTTPServerOptions{
-		BaseURL:    "/api/v1",
-		BaseRouter: r,
-	})
-
 	r.Handle("/metrics", promhttp.Handler())
+
+	if len(cfg.ACL) == 0 {
+		slog.Warn("No ACL provided. No access control checks will be performed!")
+	} else if err := cfg.ACL.Init(); err != nil {
+		return fmt.Errorf("failed to initialize ACL: %w", err)
+	}
+
+	h := pdu.Handler(r, p, cfg.ACL)
 
 	var tc *tls.Config
 	if cfg.TLS == nil {
@@ -322,7 +322,11 @@ func daemon(_ *cobra.Command, _ []string) error {
 
 	slog.Info("Listening", slog.String("address", cfg.Listen))
 
-	return s.ListenAndServe()
+	if cfg.TLS != nil {
+		return s.ListenAndServeTLS("", "")
+	} else {
+		return s.ListenAndServe()
+	}
 }
 
 func main() {

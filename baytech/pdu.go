@@ -86,6 +86,9 @@ func NewPDU(uri string, username, password string) (p *PDU, err error) {
 		}); err != nil {
 			return nil, fmt.Errorf("failed to open serial port: %w", err)
 		}
+
+	default:
+		return nil, fmt.Errorf("unsupported PDU address: %s", uri)
 	}
 
 	return p, nil
@@ -411,8 +414,7 @@ out:
 		rBuf := make([]byte, 1024)
 
 		switch c := p.conn.(type) {
-
-		case net.Conn:
+		case *net.TCPConn:
 			if err := c.SetReadDeadline(time.Now().Add(p.timeout)); err != nil {
 				return "", fmt.Errorf("failed to set read deadline: %w", err)
 			}
@@ -421,6 +423,9 @@ out:
 			if err := c.SetReadTimeout(p.timeout); err != nil {
 				return "", fmt.Errorf("failed to set read deadline: %w", err)
 			}
+
+		default:
+			return "", fmt.Errorf("unsupported connection type: %T", p.conn)
 		}
 
 		n, err := p.conn.Read(rBuf)

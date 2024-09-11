@@ -11,45 +11,25 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 	pdu "github.com/stv0g/pductl"
 	"github.com/stv0g/pductl/baytech"
 	"github.com/stv0g/pductl/client"
+	"github.com/stv0g/pductl/internal/api"
 )
 
 var (
 	p pdu.PDU
 
-	// Flags
-	address  string
-	username string
-	password string
-	ttl      time.Duration
-
-	tlsCA         string
-	tlsKey        string
-	tlsCert       string
-	tlsSkipVerify bool
+	cfg *pdu.Config
 
 	// Commands
 	rootCmd = &cobra.Command{
 		Use:               "pductl",
 		Short:             "A command line utility, REST API and Prometheus Exporter for Baytech PDUs",
 		DisableAutoGenTag: true,
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			p, err = setupPDU()
-			return err
-		},
-		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-			if err := p.Close(); err != nil {
-				return fmt.Errorf("Failed to close PDU: %w", err)
-			}
-
-			return nil
-		},
 	}
 
 	genDocs = &cobra.Command{
@@ -129,50 +109,67 @@ var (
 )
 
 func init() {
-	rootCmd.AddCommand(getStatusCmd)
-	rootCmd.AddCommand(readTempCmd)
-	rootCmd.AddCommand(clearMaximumCurrentCmd)
-	rootCmd.AddCommand(outletCmd)
-	rootCmd.AddCommand(userCmd)
-	rootCmd.AddCommand(genDocs)
-
+	rootCmd.AddCommand(getStatusCmd, readTempCmd, clearMaximumCurrentCmd, outletCmd, userCmd, genDocs)
 	userCmd.AddCommand(whoAmICmd)
-
-	outletCmd.AddCommand(outletLockCmd)
-	outletCmd.AddCommand(outletRebootCmd)
-	outletCmd.AddCommand(outletSwitchCmd)
-	outletCmd.AddCommand(outletStatusCmd)
+	outletCmd.AddCommand(outletLockCmd, outletRebootCmd, outletSwitchCmd, outletStatusCmd)
 
 	pf := rootCmd.PersistentFlags()
-	pf.StringVar(&address, "address", "tcp://10.208.1.1:4141", "Address for PDU communication")
-	pf.StringVar(&username, "username", "admin", "Username")
-	pf.StringVar(&password, "password", "admin", "password")
-	pf.StringVar(&tlsCA, "tls-ca", "", "Certificate Authority to validate client certificates against")
-	pf.StringVar(&tlsCert, "tls-cert", "", "Server certificate")
-	pf.StringVar(&tlsKey, "tls-client", "", "Server key")
-	pf.BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "Skip verification of server certificate")
-	pf.DurationVar(&ttl, "ttl", -1, "Caching time-to-live. 0 disables caching")
+	pf.String("config", "", "Path to YAML-formatted configuration file")
+	pf.String("address", "tcp://10.208.1.1:4141", "Address for PDU communication")
+	pf.String("username", "admin", "Username")
+	pf.String("password", "admin", "password")
+	pf.Duration("ttl", -1, "Caching time-to-live. 0 disables caching")
+	pf.String("tls-cacert", "", "Certificate Authority to validate client certificates against")
+	pf.String("tls-cert", "", "Server certificate")
+	pf.String("tls-key", "", "Server key")
+	pf.Bool("tls-insecure", false, "Skip verification of server certificate")
+
+	rootCmd.PersistentPreRunE = preRun
+	rootCmd.PersistentPostRunE = postRun
 }
 
-func setupHTTPClient() (c *http.Client, err error) {
+func preRun(cmd *cobra.Command, args []string) (err error) {
+	flags := rootCmd.PersistentFlags()
+	if cfg, err = pdu.ParseConfig(flags); err != nil {
+		return fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	if p, err = newPDU(cfg); err != nil {
+		return fmt.Errorf("failed to setup PDU: %w", err)
+	}
+
+	return err
+}
+
+func postRun(cmd *cobra.Command, args []string) error {
+	if err := p.Close(); err != nil {
+		return fmt.Errorf("Failed to close PDU: %w", err)
+	}
+
+	return nil
+}
+
+func newHTTPClient(cfg *pdu.Config) (c *http.Client, err error) {
+	if cfg.TLS == nil {
+		return &http.Client{}, nil
+	}
+
 	var clientCerts []tls.Certificate
-	if tlsCert != "" && tlsKey != "" {
-		if clientCert, err := tls.LoadX509KeyPair(tlsCert, tlsKey); err != nil {
-			return nil, fmt.Errorf("Error loading certificate and key file: %v", err)
-		} else {
-			clientCerts = append(clientCerts, clientCert)
-		}
+	if clientCert, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key); err != nil {
+		return nil, fmt.Errorf("Error loading certificate and key file: %v", err)
+	} else {
+		clientCerts = append(clientCerts, clientCert)
 	}
 
 	// Configure the client to trust TLS server certs issued by a CA.
 	var certPool *x509.CertPool
-	if tlsCA == "" {
+	if cfg.TLS.CACert == "" {
 		if certPool, err = x509.SystemCertPool(); err != nil {
 			return nil, fmt.Errorf("failed to create system certificate pool: %w", err)
 		}
 	} else {
 		certPool = x509.NewCertPool()
-		if caCertPEM, err := os.ReadFile(tlsCA); err != nil {
+		if caCertPEM, err := os.ReadFile(cfg.TLS.CACert); err != nil {
 			return nil, fmt.Errorf("failed to read CA cerfificate: %w", err)
 		} else if ok := certPool.AppendCertsFromPEM(caCertPEM); !ok {
 			return nil, fmt.Errorf("invalid cert in CA PEM")
@@ -184,38 +181,38 @@ func setupHTTPClient() (c *http.Client, err error) {
 			TLSClientConfig: &tls.Config{
 				RootCAs:            certPool,
 				Certificates:       clientCerts,
-				InsecureSkipVerify: tlsSkipVerify,
+				InsecureSkipVerify: cfg.TLS.Insecure,
 			},
 		},
 	}, err
 }
 
-func setupPDU() (p pdu.PDU, err error) {
-	u, err := url.Parse(address)
+func newPDU(cfg *pdu.Config) (p pdu.PDU, err error) {
+	u, err := url.Parse(cfg.Address)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
 	switch u.Scheme {
 	case "http", "https":
-		c, err := setupHTTPClient()
+		c, err := newHTTPClient(cfg)
 		if err != nil {
 			return nil, err
 		}
 
-		p, err = client.NewPDU(address, pdu.WithHTTPClient(c))
+		if p, err = client.NewPDU(cfg.Address, api.WithHTTPClient(c)); err != nil {
+			return nil, err
+		}
 
 	default:
-		p, err = baytech.NewPDU(address, username, password)
-
-		if ttl < 0 {
-			ttl = pdu.DefaultTTL
+		if p, err = baytech.NewPDU(cfg.Address, cfg.Username, cfg.Password); err != nil {
+			return nil, err
 		}
 	}
 
 	p = &pdu.Cached{
 		PDU: p,
-		TTL: ttl,
+		TTL: cfg.TTL,
 	}
 
 	return p, err
@@ -225,8 +222,10 @@ func parseState(s string) (state bool, err error) {
 	switch s {
 	case "off", "false", "0":
 		state = false
+
 	case "on", "true", "1":
 		state = true
+
 	default:
 		return false, fmt.Errorf("failed to parse outlet state: %w", err)
 	}

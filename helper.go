@@ -5,6 +5,20 @@ package pductl
 
 import (
 	"errors"
+	"regexp"
+	"strings"
 )
 
 var ErrNotFound = errors.New("failed to find outlet")
+
+var (
+	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")
+	matchAllCap   = regexp.MustCompile("([a-z0-9])([A-Z])")
+)
+
+func toKebabCase(str string) string {
+	snake := matchFirstCap.ReplaceAllString(str, "${1}-${2}")
+	snake = matchAllCap.ReplaceAllString(snake, "${1}-${2}")
+
+	return strings.ToLower(snake)
+}

@@ -27,7 +27,7 @@ type Config struct {
 		Insecure bool   `mapstructure:"insecure"`
 	} `mapstructure:"tls"`
 
-	ACL []AccessControlEntry `mapstructure:"acl"`
+	ACL AccessControlList `mapstructure:"acl"`
 }
 
 func ParseConfig(flags *flag.FlagSet) (*Config, error) {

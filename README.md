@@ -12,10 +12,24 @@ Newer generations feature Ethernet connectivity. This is mainly for older models
 
 Please see [`pductl(3)`](./docs/pductl.md) and [`pdud(3)`](./docs/pdud.md).
 
-## Roadmap
+## Example Usage
 
-- Direct support for serial devices (rather than networked console ports)
-- REST API
+```shell
+bash setup_ca.sh
+
+go run ./cmd/pdud \
+    --tls-cacert certs/ca.crt \
+    --tls-key certs/server.key \
+    --tls-cert certs/server.crt
+    --address serial:/dev/ttyUSB0 &
+
+go run ./cmd/pductl \
+    --tls-cacert certs/ca.crt \
+    --tls-key certs/client1.key \
+    --tls-cert certs/client1.crt \
+    --address http://localhost:8080 \
+    status
+```
 
 ## Authors
 

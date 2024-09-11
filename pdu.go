@@ -4,8 +4,9 @@
 package pductl
 
 import (
-	"errors"
 	"time"
+
+	"github.com/stv0g/pductl/internal/api"
 )
 
 const (
@@ -14,9 +15,11 @@ const (
 	DefaultTTL = 1 * time.Minute
 )
 
-var (
-	ErrDecode          = errors.New("failed to decode")
-	ErrInvalidOutletID = errors.New("invalid outlet ID")
+type (
+	Status        = api.Status
+	BreakerStatus = api.BreakerStatus
+	OutletStatus  = api.OutletStatus
+	GroupStatus   = api.GroupStatus
 )
 
 type PDU interface {
