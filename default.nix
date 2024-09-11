@@ -3,7 +3,7 @@ buildGoModule {
   pname = "pductl";
   version = "0.1.0";
   src = ./.;
-  vendorHash = "sha256-RnwlwVwU1O2yYMPtUbyz8Xqv1gIZdKNapNhd9QnLjHk=";
+  vendorHash = "sha256-HoiYuyzHctwuwfEdySeMjdFe4juyqj+dPZ5U7OADdSc=";
 
   meta = {
     mainProgram = "pdud";
