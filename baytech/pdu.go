@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/url"
 	"os"
@@ -392,6 +393,13 @@ func (p *PDU) send(cmd string) error {
 }
 
 func (p *PDU) execute(cmd string, args ...any) (string, error) {
+	opts := []any{slog.String("command", cmd)}
+	if len(args) > 0 {
+		opts = append(opts, slog.Any("args", args))
+	}
+
+	slog.Debug("Executing PDU command", opts...)
+
 	fCmd := fmt.Sprintf(cmd, args...)
 	fBuf := []byte{}
 	sBuf := ""

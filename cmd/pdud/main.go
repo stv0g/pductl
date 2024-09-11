@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 
@@ -266,6 +267,8 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 		}))
 	}
 
+	slog.Info("Initialized metrics")
+
 	return nil
 }
 
@@ -282,7 +285,9 @@ func daemon(_ *cobra.Command, _ []string) error {
 	r.Handle("/metrics", promhttp.Handler())
 
 	var tc *tls.Config
-	if cfg.TLS != nil {
+	if cfg.TLS == nil {
+		slog.Warn("No TLS configuration provided. API will be exposed unencrypted and unauthenticated!")
+	} else {
 		cer, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key)
 		if err != nil {
 			return fmt.Errorf("failed to load server key pair: %w", err)
@@ -315,10 +320,14 @@ func daemon(_ *cobra.Command, _ []string) error {
 		TLSConfig: tc,
 	}
 
+	slog.Info("Listening", slog.String("address", cfg.Listen))
+
 	return s.ListenAndServe()
 }
 
 func main() {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(-1)
 	}
