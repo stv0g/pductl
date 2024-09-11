@@ -10,7 +10,7 @@ Newer generations feature Ethernet connectivity. This is mainly for older models
 
 ## Documentation
 
-Please see [`pductl(3)`](./docs/pductl.md).
+Please see [`pductl(3)`](./docs/pductl.md) and [`pdud(3)`](./docs/pdud.md).
 
 ## Roadmap
 

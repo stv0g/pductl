@@ -1,4 +1,4 @@
-## pductl completion zsh
+## pdud completion zsh
 
 Generate the autocompletion script for zsh
 
@@ -13,23 +13,23 @@ to enable it.  You can execute the following once:
 
 To load completions in your current shell session:
 
-	source <(pductl completion zsh)
+	source <(pdud completion zsh)
 
 To load completions for every new session, execute once:
 
 #### Linux:
 
-	pductl completion zsh > "${fpath[1]}/_pductl"
+	pdud completion zsh > "${fpath[1]}/_pdud"
 
 #### macOS:
 
-	pductl completion zsh > $(brew --prefix)/share/zsh/site-functions/_pductl
+	pdud completion zsh > $(brew --prefix)/share/zsh/site-functions/_pdud
 
 You will need to start a new shell for this setup to take effect.
 
 
 ```
-pductl completion zsh [flags]
+pdud completion zsh [flags]
 ```
 
 ### Options
@@ -42,18 +42,19 @@ pductl completion zsh [flags]
 ### Options inherited from parent commands
 
 ```
-      --address string      Address for PDU communication (default "tcp://10.208.1.1:4141")
+      --address string      Address of TCP socket for PDU communication (default "tcp://10.208.1.1:4141")
       --config string       Path to YAML-formatted configuration file
+      --listen string       Address for HTTP listener (default ":8080")
       --password string     password (default "admin")
       --tls-cacert string   Certificate Authority to validate client certificates against
       --tls-cert string     Server certificate
-      --tls-insecure        Skip verification of server certificate
+      --tls-insecure        Skip verification of client certificates
       --tls-key string      Server key
-      --ttl duration        Caching time-to-live. 0 disables caching (default -1ns)
+      --ttl duration        Caching time-to-live. 0 disables caching (default 1m0s)
       --username string     Username (default "admin")
 ```
 
 ### SEE ALSO
 
-* [pductl completion](pductl_completion.md)	 - Generate the autocompletion script for the specified shell
+* [pdud completion](pdud_completion.md)	 - Generate the autocompletion script for the specified shell
 

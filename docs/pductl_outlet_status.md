@@ -1,13 +1,22 @@
-## pductl
+## pductl outlet status
 
-A command line utility, REST API and Prometheus Exporter for Baytech PDUs
+Get status of outlet
+
+```
+pductl outlet status OUTLET [flags]
+```
 
 ### Options
 
 ```
+  -h, --help   help for status
+```
+
+### Options inherited from parent commands
+
+```
       --address string      Address for PDU communication (default "tcp://10.208.1.1:4141")
       --config string       Path to YAML-formatted configuration file
-  -h, --help                help for pductl
       --password string     password (default "admin")
       --tls-cacert string   Certificate Authority to validate client certificates against
       --tls-cert string     Server certificate
@@ -19,10 +28,5 @@ A command line utility, REST API and Prometheus Exporter for Baytech PDUs
 
 ### SEE ALSO
 
-* [pductl clear](pductl_clear.md)	 - Reset the maximum detected current
-* [pductl completion](pductl_completion.md)	 - Generate the autocompletion script for the specified shell
 * [pductl outlet](pductl_outlet.md)	 - Control outlets
-* [pductl status](pductl_status.md)	 - Show PDU status
-* [pductl temp](pductl_temp.md)	 - Read current temperature
-* [pductl user](pductl_user.md)	 - Manage users
 
