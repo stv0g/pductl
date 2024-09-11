@@ -14,39 +14,16 @@
     flake-utils.lib.eachDefaultSystem (
       system:
       let
-        overlay = final: prev: {
-          pductl = final.buildGoModule {
-            pname = "pductl";
-            version = "0.1.0";
-            src = ./.;
-            vendorHash = "sha256-RnwlwVwU1O2yYMPtUbyz8Xqv1gIZdKNapNhd9QnLjHk=";
-          };
-        };
-
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [ overlay ];
-        };
+        pkgs = nixpkgs.legacyPackages.${system};
       in
       {
-        devShell = pkgs.mkShell {
-          buildInputs = with pkgs; [
-            go
-            golangci-lint
-            reuse
-            oapi-codegen
-          ];
-        };
+        devShell = import ./shell.nix { inherit pkgs; };
 
-        overlays = {
-          default = overlay;
-        };
+        overlays.default = final: prev: { pductl = final.callPackage ./default.nix { }; };
+        packages.default = pkgs.callPackage ./default.nix { };
+        nixosModules.default = import ./module.nix;
 
-        packages = {
-          default = pkgs.pductl;
-        };
-
-        formatter = nixpkgs.nixfmt-rfc-style;
+        formatter = pkgs.nixfmt-rfc-style;
       }
     );
 }
