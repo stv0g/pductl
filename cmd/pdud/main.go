@@ -8,9 +8,12 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 
+	"github.com/coreos/go-systemd/v22/activation"
+	daemonx "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -322,11 +325,39 @@ func daemon(_ *cobra.Command, _ []string) error {
 
 	slog.Info("Listening", slog.String("address", cfg.Listen))
 
-	if cfg.TLS != nil {
-		return s.ListenAndServeTLS("", "")
-	} else {
-		return s.ListenAndServe()
+	daemonx.SdNotify(false, daemonx.SdNotifyReady)
+
+	return listenAndServe(s)
+}
+
+func listenAndServe(s *http.Server) error {
+	listeners, err := activation.Listeners()
+	if err != nil {
+		return fmt.Errorf("failed to get listeners from systemd: %w", err)
+	} else if len(listeners) > 1 {
+		return fmt.Errorf("got more than one socket fds from systemd")
 	}
+
+	if len(listeners) == 1 {
+		slog.Debug("Inherited socket from systemd")
+	} else {
+		ln, err := net.Listen("tcp", s.Addr)
+		if err != nil {
+			return err
+		}
+
+		defer ln.Close()
+
+		listeners = append(listeners, ln)
+	}
+
+	if s.TLSConfig != nil {
+		err = s.ServeTLS(listeners[0], "", "")
+	} else {
+		err = s.Serve(listeners[0])
+	}
+
+	return err
 }
 
 func main() {
