@@ -47,6 +47,8 @@ var (
 	reOStatusOutlet = regexp.MustCompile(`(?m)^\|\s*([A-Za-z0-9- ]+?)\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+V\s*\|\s*([0-9\.]+)\s+W\s*\|\s*([0-9\.]+)\s+VA\s*\|\s*(On|Off)\s*?(Locked|)\s*\|`)
 )
 
+type OutletID string
+
 type PDU struct {
 	Username string
 	Password string
@@ -92,9 +94,10 @@ func (p *PDU) Close() error {
 	return p.conn.Close()
 }
 
-func (p *PDU) SwitchOutlet(id int, state bool) (err error) {
-	if id < 0 || id > NumOutlets {
-		return ErrInvalidOutletID
+func (p *PDU) SwitchOutlet(idStr string, state bool) (err error) {
+	id, err := p.lookupID(idStr)
+	if err != nil {
+		return fmt.Errorf("invalid outlet ID: %s", err)
 	}
 
 	if state {
@@ -105,9 +108,10 @@ func (p *PDU) SwitchOutlet(id int, state bool) (err error) {
 	return err
 }
 
-func (p *PDU) LockOutlet(id int, state bool) (err error) {
-	if id < 0 || id > NumOutlets {
-		return ErrInvalidOutletID
+func (p *PDU) LockOutlet(idStr string, state bool) (err error) {
+	id, err := p.lookupID(idStr)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidOutletID, err)
 	}
 
 	if state {
@@ -118,12 +122,13 @@ func (p *PDU) LockOutlet(id int, state bool) (err error) {
 	return err
 }
 
-func (p *PDU) RebootOutlet(id int) error {
-	if id < 0 || id > NumOutlets {
-		return ErrInvalidOutletID
+func (p *PDU) RebootOutlet(idStr string) error {
+	id, err := p.lookupID(idStr)
+	if err != nil {
+		return fmt.Errorf("%w: %s", ErrInvalidOutletID, err)
 	}
 
-	_, err := p.execute("Reboot %d", id)
+	_, err = p.execute("Reboot %d", id)
 	return err
 }
 
@@ -141,9 +146,12 @@ func (p *PDU) Status() (*pdu.Status, error) {
 		return sts, fmt.Errorf("%w: total Kwh", ErrDecode)
 	}
 
-	if sts.TotalKWh, err = strconv.ParseInt(m[1], 10, 64); err != nil {
+	kwh, err := strconv.ParseInt(m[1], 10, 64)
+	if err != nil {
 		return sts, fmt.Errorf("%w: total KWh %w", ErrDecode, err)
 	}
+
+	sts.TotalKwh = float32(kwh)
 
 	// Temperature
 	m = reTemperature.FindStringSubmatch(out)
@@ -156,7 +164,7 @@ func (p *PDU) Status() (*pdu.Status, error) {
 		return sts, fmt.Errorf("%w temp: %s", ErrDecode, err)
 	}
 
-	sts.Temperature = float64(f-32) * 5 / 9
+	sts.Temp = float32(f-32) * 5 / 9
 
 	// Switches
 	m = reStatusSwitch.FindStringSubmatch(out)
@@ -179,13 +187,18 @@ func (p *PDU) Status() (*pdu.Status, error) {
 			ID:   i,
 		}
 
-		if breaker.TrueRMSCurrent, err = strconv.ParseFloat(b[2], 64); err != nil {
+		cur, err := strconv.ParseFloat(b[2], 32)
+		if err != nil {
 			return sts, fmt.Errorf("%w breaker current: %w", ErrDecode, err)
 		}
 
-		if breaker.PeakRMSCurrent, err = strconv.ParseFloat(b[3], 64); err != nil {
+		curPeak, err := strconv.ParseFloat(b[3], 32)
+		if err != nil {
 			return sts, fmt.Errorf("%w breaker current: %w", ErrDecode, err)
 		}
+
+		breaker.TrueRMSCurrent = float32(cur)
+		breaker.PeakRMSCurrent = float32(curPeak)
 
 		sts.Breakers = append(sts.Breakers, breaker)
 	}
@@ -208,37 +221,62 @@ func (p *PDU) Status() (*pdu.Status, error) {
 			group.BreakerID = 2
 		}
 
-		if group.TrueRMSCurrent, err = strconv.ParseFloat(g[2], 64); err != nil {
+		cur, err := strconv.ParseFloat(g[2], 64)
+		if err != nil {
 			return sts, fmt.Errorf("%w group current: %w", ErrDecode, err)
 		}
 
-		if group.PeakRMSCurrent, err = strconv.ParseFloat(g[3], 64); err != nil {
+		curPeak, err := strconv.ParseFloat(g[3], 64)
+		if err != nil {
 			return sts, fmt.Errorf("%w group peak current: %w", ErrDecode, err)
 		}
 
-		if group.TrueRMSVoltage, err = strconv.ParseFloat(g[4], 64); err != nil {
+		volt, err := strconv.ParseFloat(g[4], 64)
+		if err != nil {
 			return sts, fmt.Errorf("%w group voltage: %w", ErrDecode, err)
 		}
 
-		if group.AveragePower, err = strconv.ParseFloat(g[5], 64); err != nil {
+		avgPower, err := strconv.ParseFloat(g[5], 64)
+		if err != nil {
 			return sts, fmt.Errorf("%w group average power: %w", ErrDecode, err)
 		}
 
-		if group.VoltAmps, err = strconv.ParseFloat(g[6], 64); err != nil {
+		va, err := strconv.ParseFloat(g[6], 64)
+		if err != nil {
 			return sts, fmt.Errorf("%w group VA: %w", ErrDecode, err)
 		}
+
+		group.TrueRMSCurrent = float32(cur)
+		group.PeakRMSCurrent = float32(curPeak)
+		group.TrueRMSVoltage = float32(volt)
+		group.AveragePower = float32(avgPower)
+		group.VoltAmps = float32(va)
 
 		sts.Groups = append(sts.Groups, group)
 	}
 
-	if sts.Outlets, err = p.StatusOutlets(); err != nil {
+	if sts.Outlets, err = p.StatusOutletAll(); err != nil {
 		return sts, err
 	}
 
 	return sts, nil
 }
 
-func (p *PDU) StatusOutlets() ([]pdu.OutletStatus, error) {
+func (p *PDU) StatusOutlet(idStr string) (*pdu.OutletStatus, error) {
+	id, err := p.lookupID(idStr)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidOutletID, err)
+	}
+
+	outlets, err := p.StatusOutletAll()
+	if err != nil {
+		return nil, fmt.Errorf("Failed to control outlet: %w", err)
+	}
+
+	return &outlets[id-1], nil
+}
+
+func (p *PDU) StatusOutletAll() ([]pdu.OutletStatus, error) {
 	outlets := []pdu.OutletStatus{}
 
 	out, err := p.execute("OStatus")
@@ -274,25 +312,36 @@ func (p *PDU) StatusOutlets() ([]pdu.OutletStatus, error) {
 			outlet.GroupID = 4
 		}
 
-		if outlet.TrueRMSCurrent, err = strconv.ParseFloat(o[2], 64); err != nil {
+		cur, err := strconv.ParseFloat(o[2], 64)
+		if err != nil {
 			return nil, fmt.Errorf("%w group current: %w", ErrDecode, err)
 		}
 
-		if outlet.PeakRMSCurrent, err = strconv.ParseFloat(o[3], 64); err != nil {
+		curPeak, err := strconv.ParseFloat(o[3], 64)
+		if err != nil {
 			return nil, fmt.Errorf("%w group peak current: %w", ErrDecode, err)
 		}
 
-		if outlet.TrueRMSVoltage, err = strconv.ParseFloat(o[4], 64); err != nil {
+		volt, err := strconv.ParseFloat(o[4], 64)
+		if err != nil {
 			return nil, fmt.Errorf("%w group voltage: %w", ErrDecode, err)
 		}
 
-		if outlet.AveragePower, err = strconv.ParseFloat(o[5], 64); err != nil {
+		avgPower, err := strconv.ParseFloat(o[5], 64)
+		if err != nil {
 			return nil, fmt.Errorf("%w group average power: %w", ErrDecode, err)
 		}
 
-		if outlet.VoltAmps, err = strconv.ParseFloat(o[6], 64); err != nil {
+		va, err := strconv.ParseFloat(o[6], 64)
+		if err != nil {
 			return nil, fmt.Errorf("%w group VA: %w", ErrDecode, err)
 		}
+
+		outlet.TrueRMSCurrent = float32(cur)
+		outlet.PeakRMSCurrent = float32(curPeak)
+		outlet.TrueRMSVoltage = float32(volt)
+		outlet.AveragePower = float32(avgPower)
+		outlet.VoltAmps = float32(va)
 
 		outlets = append(outlets, outlet)
 	}
@@ -324,11 +373,6 @@ func (p *PDU) Temperature() (float64, error) {
 	c := float64(f-32) * 5 / 9
 
 	return c, nil
-}
-
-func (p *PDU) Logout() error {
-	_, err := p.execute("Logout")
-	return err
 }
 
 func (p *PDU) WhoAmI() (string, error) {
@@ -415,4 +459,32 @@ out:
 	res = strings.TrimSpace(res)
 
 	return res, nil
+}
+
+func (p *PDU) lookupID(idStr string) (int, error) {
+	if idStr == "all" {
+		return 0, nil
+	}
+
+	if id, err := strconv.ParseInt(idStr, 0, 64); err == nil {
+		if id < 0 || id > NumOutlets {
+			return -1, ErrInvalidOutletID
+		}
+
+		return int(id), nil
+	}
+
+	// Attempt to lookup outlet by name
+	outlets, err := p.StatusOutletAll()
+	if err != nil {
+		return -1, fmt.Errorf("failed to get outlets from PDU: %w", err)
+	}
+
+	for i, outlet := range outlets {
+		if outlet.Name == idStr {
+			return i + 1, nil
+		}
+	}
+
+	return -1, fmt.Errorf("%w: %s", pdu.ErrNotFound, idStr)
 }

@@ -4,8 +4,11 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -24,8 +27,11 @@ var (
 	username string
 	password string
 	listen   string
-	outlet   string
-	outletID int
+	ttl      time.Duration
+
+	tlsCA   string
+	tlsKey  string
+	tlsCert string
 
 	// Commands
 	rootCmd = &cobra.Command{
@@ -42,7 +48,7 @@ var (
 
 			p = &pdu.Cached{
 				PDU: q,
-				TTL: time.Minute,
+				TTL: ttl,
 			}
 
 			return err
@@ -64,12 +70,11 @@ func init() {
 	pf.StringVar(&username, "username", "admin", "Username")
 	pf.StringVar(&password, "password", "admin", "password")
 	pf.StringVar(&listen, "listen", ":8080", "Address for HTTP listener")
+	pf.StringVar(&tlsCA, "tls-ca", "", "Certificate Authority to validate client certificates against")
+	pf.StringVar(&tlsCert, "tls-cert", "", "Server certificate")
+	pf.StringVar(&tlsKey, "tls-client", "", "Server key")
+	pf.DurationVar(&ttl, "ttl", pdu.DefaultTTL, "Caching time-to-live. 0 disables caching")
 }
-
-var opsProcessed = promauto.NewCounter(prometheus.CounterOpts{
-	Name: "myapp_processed_ops_total",
-	Help: "The total number of processed events",
-})
 
 func withStatus(cb func(sts *pdu.Status) float64) func() float64 {
 	return func() float64 {
@@ -98,13 +103,13 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "temperature",
 	}, withStatus(func(sts *pdu.Status) float64 {
-		return sts.Temperature
+		return float64(sts.Temp)
 	}))
 
 	promauto.NewCounterFunc(prometheus.CounterOpts{
 		Name: "total_kwh",
 	}, withStatus(func(sts *pdu.Status) float64 {
-		return float64(sts.TotalKWh)
+		return float64(sts.TotalKwh)
 	}))
 
 	for i, breaker := range sts.Breakers {
@@ -117,7 +122,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "true_rms_current",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Breakers[i].TrueRMSCurrent
+			return float64(sts.Breakers[i].TrueRMSCurrent)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -125,7 +130,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "peak_rms_current",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Breakers[i].PeakRMSCurrent
+			return float64(sts.Breakers[i].PeakRMSCurrent)
 		}))
 	}
 
@@ -142,7 +147,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "true_rms_current",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Groups[i].TrueRMSCurrent
+			return float64(sts.Groups[i].TrueRMSCurrent)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -151,7 +156,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "peak_rms_current",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Groups[i].PeakRMSCurrent
+			return float64(sts.Groups[i].PeakRMSCurrent)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -160,7 +165,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "avg_power",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Groups[i].AveragePower
+			return float64(sts.Groups[i].AveragePower)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -169,7 +174,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "va",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Groups[i].VoltAmps
+			return float64(sts.Groups[i].VoltAmps)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -178,7 +183,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "true_rms_voltage",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Groups[i].TrueRMSVoltage
+			return float64(sts.Groups[i].TrueRMSCurrent)
 		}))
 	}
 
@@ -196,7 +201,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "true_rms_current",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Outlets[i].TrueRMSCurrent
+			return float64(sts.Outlets[i].TrueRMSCurrent)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -205,7 +210,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "peak_rms_current",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Outlets[i].PeakRMSCurrent
+			return float64(sts.Outlets[i].PeakRMSCurrent)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -214,7 +219,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "avg_power",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Outlets[i].AveragePower
+			return float64(sts.Outlets[i].AveragePower)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -223,7 +228,7 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 			Name:        "va",
 			ConstLabels: labels,
 		}, withStatus(func(sts *pdu.Status) float64 {
-			return sts.Outlets[i].VoltAmps
+			return float64(sts.Outlets[i].VoltAmps)
 		}))
 
 		promauto.NewGaugeFunc(prometheus.GaugeOpts{
@@ -249,12 +254,56 @@ func setupMetrics(_ *cobra.Command, _ []string) error {
 }
 
 func daemon(_ *cobra.Command, _ []string) error {
-	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(listen, nil)
+	r := http.NewServeMux()
+	si := pdu.NewStrictHandler(&pdu.Server{
+		PDU: p,
+	}, nil)
+	h := pdu.HandlerWithOptions(si, pdu.StdHTTPServerOptions{
+		BaseURL:    "/api/v1",
+		BaseRouter: r,
+	})
 
-	return nil
+	r.Handle("/metrics", promhttp.Handler())
+
+	var tc *tls.Config
+	if tlsKey != "" && tlsCert != "" {
+		cer, err := tls.LoadX509KeyPair(tlsCert, tlsKey)
+		if err != nil {
+			return fmt.Errorf("failed to load server key pair: %w", err)
+		}
+
+		tc = &tls.Config{
+			Certificates: []tls.Certificate{cer},
+			ClientAuth:   tls.RequireAndVerifyClientCert,
+			CipherSuites: []uint16{
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256,
+				tls.TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+			},
+			MinVersion: tls.VersionTLS13,
+		}
+
+		if tlsCA != "" {
+			caContents, err := os.ReadFile(tlsCA)
+			if err != nil {
+				return fmt.Errorf("failed to read CA: %w", err)
+			}
+
+			tc.ClientCAs = x509.NewCertPool()
+			tc.ClientCAs.AppendCertsFromPEM(caContents)
+		}
+	}
+
+	s := &http.Server{
+		Handler:   h,
+		Addr:      listen,
+		TLSConfig: tc,
+	}
+
+	return s.ListenAndServe()
 }
 
 func main() {
-	rootCmd.Execute()
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(-1)
+	}
 }

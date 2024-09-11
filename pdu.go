@@ -5,20 +5,13 @@ package pductl
 
 import (
 	"errors"
+	"time"
 )
 
 const (
-	All = 0 // Use id == 0 to control all outlets at once
+	All = "all"
 
-	// For Baytech MMP-14
-	NumOutlets  = 20
-	NumBreakers = 3
-	NumGroups   = 4
-	NumSwitches = 2
-
-	promptReady    = "MMP-14>"
-	promptPassword = "Enter Password: "
-	promptUsername = "Enter user name: "
+	DefaultTTL = 1 * time.Minute
 )
 
 var (
@@ -28,17 +21,13 @@ var (
 
 type PDU interface {
 	Close() error
-	SwitchOutlet(id int, state bool) (err error)
-	LockOutlet(id int, state bool) (err error)
-	RebootOutlet(id int) error
+	SwitchOutlet(id string, state bool) (err error)
+	LockOutlet(id string, state bool) (err error)
+	RebootOutlet(id string) error
 	Status() (*Status, error)
-	StatusOutlets() ([]OutletStatus, error)
+	StatusOutlet(id string) (*OutletStatus, error)
+	StatusOutletAll() ([]OutletStatus, error)
 	ClearMaximumCurrents() error
 	Temperature() (float64, error)
-	Logout() error
 	WhoAmI() (string, error)
-}
-
-func NewPDU(address string) (p *PDU, err error) {
-	return p, nil
 }

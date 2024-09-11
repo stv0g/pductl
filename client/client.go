@@ -39,10 +39,10 @@ func handleResponse(r *http.Response) error {
 	return errors.New(ap.Error)
 }
 
-func NewPDU(address string) (c *Client, err error) {
+func NewPDU(address string, opts ...pdu.ClientOption) (c *Client, err error) {
 	c = &Client{}
 
-	if c.client, err = pdu.NewClientWithResponses(address + "/api/v1"); err != nil {
+	if c.client, err = pdu.NewClientWithResponses(address+"/api/v1", opts...); err != nil {
 		return nil, err
 	}
 

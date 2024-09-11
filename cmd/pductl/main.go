@@ -4,24 +4,35 @@
 package main
 
 import (
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/url"
 	"os"
-	"strconv"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 	pdu "github.com/stv0g/pductl"
 	"github.com/stv0g/pductl/baytech"
+	"github.com/stv0g/pductl/client"
 )
 
 var (
-	p *baytech.PDU
+	p pdu.PDU
 
 	// Flags
 	address  string
 	username string
 	password string
+	ttl      time.Duration
+
+	tlsCA         string
+	tlsKey        string
+	tlsCert       string
+	tlsSkipVerify bool
 
 	// Commands
 	rootCmd = &cobra.Command{
@@ -29,7 +40,7 @@ var (
 		Short:             "A command line utility, REST API and Prometheus Exporter for Baytech PDUs",
 		DisableAutoGenTag: true,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			p, err = baytech.NewPDU(address, username, password)
+			p, err = setupPDU()
 			return err
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
@@ -68,7 +79,7 @@ var (
 	whoAmICmd = &cobra.Command{
 		Use:   "whoami",
 		Short: "Displays the current user name",
-		RunE:  whoami,
+		RunE:  whoAmI,
 	}
 
 	readTempCmd = &cobra.Command{
@@ -133,50 +144,94 @@ func init() {
 	outletCmd.AddCommand(outletStatusCmd)
 
 	pf := rootCmd.PersistentFlags()
-	pf.StringVar(&address, "address", "10.208.1.1:4141", "Address of TCP socket for PDU communication")
+	pf.StringVar(&address, "address", "tcp://10.208.1.1:4141", "Address for PDU communication")
 	pf.StringVar(&username, "username", "admin", "Username")
 	pf.StringVar(&password, "password", "admin", "password")
+	pf.StringVar(&tlsCA, "tls-ca", "", "Certificate Authority to validate client certificates against")
+	pf.StringVar(&tlsCert, "tls-cert", "", "Server certificate")
+	pf.StringVar(&tlsKey, "tls-client", "", "Server key")
+	pf.BoolVar(&tlsSkipVerify, "tls-skip-verify", false, "Skip verification of server certificate")
+	pf.DurationVar(&ttl, "ttl", -1, "Caching time-to-live. 0 disables caching")
 }
 
-func getOutletID(arg string) (int, error) {
-	if arg == "all" {
-		return pdu.All, nil
-	}
-
-	if id, err := strconv.ParseInt(arg, 0, 64); err == nil {
-		return int(id), nil
-	}
-
-	// Attempt to lookup outlet by name
-	outlets, err := p.StatusOutlets()
-	if err != nil {
-		return -1, fmt.Errorf("failed to get outlets from PDU: %w", err)
-	}
-
-	for i, outlet := range outlets {
-		if outlet.Name == arg {
-			return i + 1, nil
+func setupHTTPClient() (c *http.Client, err error) {
+	var clientCerts []tls.Certificate
+	if tlsCert != "" && tlsKey != "" {
+		if clientCert, err := tls.LoadX509KeyPair(tlsCert, tlsKey); err != nil {
+			return nil, fmt.Errorf("Error loading certificate and key file: %v", err)
+		} else {
+			clientCerts = append(clientCerts, clientCert)
 		}
 	}
 
-	return -1, fmt.Errorf("failed to find outlet %s", arg)
-}
-
-func getOutletIDandState(arg1, arg2 string) (id int, state bool, err error) {
-	if id, err = getOutletID(arg1); err != nil {
-		return -1, false, err
+	// Configure the client to trust TLS server certs issued by a CA.
+	var certPool *x509.CertPool
+	if tlsCA == "" {
+		if certPool, err = x509.SystemCertPool(); err != nil {
+			return nil, fmt.Errorf("failed to create system certificate pool: %w", err)
+		}
+	} else {
+		certPool = x509.NewCertPool()
+		if caCertPEM, err := os.ReadFile(tlsCA); err != nil {
+			return nil, fmt.Errorf("failed to read CA cerfificate: %w", err)
+		} else if ok := certPool.AppendCertsFromPEM(caCertPEM); !ok {
+			return nil, fmt.Errorf("invalid cert in CA PEM")
+		}
 	}
 
-	switch arg2 {
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:            certPool,
+				Certificates:       clientCerts,
+				InsecureSkipVerify: tlsSkipVerify,
+			},
+		},
+	}, err
+}
+
+func setupPDU() (p pdu.PDU, err error) {
+	u, err := url.Parse(address)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
+	switch u.Scheme {
+	case "http", "https":
+		c, err := setupHTTPClient()
+		if err != nil {
+			return nil, err
+		}
+
+		p, err = client.NewPDU(address, pdu.WithHTTPClient(c))
+
+	default:
+		p, err = baytech.NewPDU(address, username, password)
+
+		if ttl < 0 {
+			ttl = pdu.DefaultTTL
+		}
+	}
+
+	p = &pdu.Cached{
+		PDU: p,
+		TTL: ttl,
+	}
+
+	return p, err
+}
+
+func parseState(s string) (state bool, err error) {
+	switch s {
 	case "off", "false", "0":
 		state = false
 	case "on", "true", "1":
 		state = true
 	default:
-		return -1, false, fmt.Errorf("failed to parse outlet state: %w", err)
+		return false, fmt.Errorf("failed to parse outlet state: %w", err)
 	}
 
-	return id, state, nil
+	return state, nil
 }
 
 func getStatus(_ *cobra.Command, _ []string) error {
@@ -191,7 +246,7 @@ func getStatus(_ *cobra.Command, _ []string) error {
 	return enc.Encode(sts)
 }
 
-func whoami(_ *cobra.Command, _ []string) error {
+func whoAmI(_ *cobra.Command, _ []string) error {
 	user, err := p.WhoAmI()
 	if err != nil {
 		return fmt.Errorf("Failed to send command: %w", err)
@@ -222,11 +277,7 @@ func clearMaximumCurrent(_ *cobra.Command, _ []string) error {
 }
 
 func outletReboot(_ *cobra.Command, args []string) error {
-	id, err := getOutletID(args[0])
-	if err != nil {
-		return err
-	}
-
+	id := args[0]
 	if err := p.RebootOutlet(id); err != nil {
 		return fmt.Errorf("Failed to control outlet: %w", err)
 	}
@@ -235,7 +286,8 @@ func outletReboot(_ *cobra.Command, args []string) error {
 }
 
 func outletSwitch(_ *cobra.Command, args []string) error {
-	id, state, err := getOutletIDandState(args[0], args[1])
+	id := args[0]
+	state, err := parseState(args[1])
 	if err != nil {
 		return err
 	}
@@ -248,7 +300,8 @@ func outletSwitch(_ *cobra.Command, args []string) error {
 }
 
 func outletLock(_ *cobra.Command, args []string) error {
-	id, state, err := getOutletIDandState(args[0], args[1])
+	id := args[0]
+	state, err := parseState(args[1])
 	if err != nil {
 		return err
 	}
@@ -261,29 +314,16 @@ func outletLock(_ *cobra.Command, args []string) error {
 }
 
 func outletStatus(_ *cobra.Command, args []string) error {
-	id, err := getOutletID(args[0])
+	id := args[0]
+	sts, err := p.StatusOutlet(id)
 	if err != nil {
 		return err
-	}
-
-	outlets, err := p.StatusOutlets()
-	if err != nil {
-		return fmt.Errorf("Failed to control outlet: %w", err)
-	}
-
-	var out any
-	if id == pdu.All {
-		out = outlets
-	} else if id < 1 || id > len(outlets) {
-		return fmt.Errorf("invalid outlet number: %d", id)
-	} else {
-		out = outlets[id-1]
 	}
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "   ")
 
-	return enc.Encode(out)
+	return enc.Encode(sts)
 }
 
 func main() {
