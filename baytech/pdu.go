@@ -6,12 +6,16 @@ package baytech
 import (
 	"errors"
 	"fmt"
+	"io"
 	"net"
+	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.bug.st/serial"
 
 	pdu "github.com/stv0g/pductl"
 )
@@ -47,11 +51,16 @@ type PDU struct {
 	Username string
 	Password string
 
-	conn    net.Conn
+	conn    io.ReadWriteCloser
 	timeout time.Duration
 }
 
-func NewPDU(address string, username, password string) (p *PDU, err error) {
+func NewPDU(uri string, username, password string) (p *PDU, err error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse URL: %w", err)
+	}
+
 	p = &PDU{
 		Username: username,
 		Password: password,
@@ -59,8 +68,21 @@ func NewPDU(address string, username, password string) (p *PDU, err error) {
 		timeout: 300 * time.Millisecond,
 	}
 
-	if p.conn, err = net.Dial("tcp", address); err != nil {
-		return nil, fmt.Errorf("failed to establish connection: %w", err)
+	switch u.Scheme {
+	case "tcp":
+		if p.conn, err = net.Dial("tcp", u.Host); err != nil {
+			return nil, fmt.Errorf("failed to establish TCP connection: %w", err)
+		}
+
+	case "serial", "":
+		if p.conn, err = serial.Open(u.Path, &serial.Mode{
+			BaudRate: 9600,
+			DataBits: 8,
+			StopBits: 1,
+			Parity:   serial.NoParity,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to open serial port: %w", err)
+		}
 	}
 
 	return p, nil
@@ -336,8 +358,17 @@ out:
 	for {
 		rBuf := make([]byte, 1024)
 
-		if err := p.conn.SetReadDeadline(time.Now().Add(p.timeout)); err != nil {
-			return "", fmt.Errorf("failed to set read deadline: %w", err)
+		switch c := p.conn.(type) {
+
+		case net.Conn:
+			if err := c.SetReadDeadline(time.Now().Add(p.timeout)); err != nil {
+				return "", fmt.Errorf("failed to set read deadline: %w", err)
+			}
+
+		case serial.Port:
+			if err := c.SetReadTimeout(p.timeout); err != nil {
+				return "", fmt.Errorf("failed to set read deadline: %w", err)
+			}
 		}
 
 		n, err := p.conn.Read(rBuf)

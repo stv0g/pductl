@@ -60,7 +60,7 @@ var (
 func init() {
 	pf := rootCmd.PersistentFlags()
 
-	pf.StringVar(&address, "address", "10.208.1.1:4141", "Address of TCP socket for PDU communication")
+	pf.StringVar(&address, "address", "tcp://10.208.1.1:4141", "Address of TCP socket for PDU communication")
 	pf.StringVar(&username, "username", "admin", "Username")
 	pf.StringVar(&password, "password", "admin", "password")
 	pf.StringVar(&listen, "listen", ":8080", "Address for HTTP listener")

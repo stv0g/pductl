@@ -10,6 +10,7 @@ require (
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/prometheus/client_golang v1.20.2
 	github.com/spf13/cobra v1.8.1
+	go.bug.st/serial v1.6.2
 )
 
 require (
