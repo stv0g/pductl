@@ -81,7 +81,7 @@ func NewPDU(uri string, username, password string) (p *PDU, err error) {
 		if p.conn, err = serial.Open(u.Path, &serial.Mode{
 			BaudRate: 9600,
 			DataBits: 8,
-			StopBits: 1,
+			StopBits: serial.OneStopBit,
 			Parity:   serial.NoParity,
 		}); err != nil {
 			return nil, fmt.Errorf("failed to open serial port: %w", err)
