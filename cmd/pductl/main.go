@@ -8,9 +8,11 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
@@ -155,7 +157,7 @@ func postRun(cmd *cobra.Command, args []string) error {
 }
 
 func newHTTPClient(cfg *pdu.Config) (c *http.Client, err error) {
-	if cfg.TLS == nil {
+	if cfg.TLS.Cert == "" || cfg.TLS.Key == "" {
 		return &http.Client{}, nil
 	}
 
@@ -210,9 +212,16 @@ func newPDU(cfg *pdu.Config) (p pdu.PDU, err error) {
 		}
 
 	default:
-		if p, err = baytech.NewPDU(cfg.Address, cfg.Username, cfg.Password); err != nil {
+		q, err := baytech.NewPDU(cfg.Address)
+		if err != nil {
 			return nil, err
 		}
+
+		if err := q.Login(cfg.Username, cfg.Password); err != nil {
+			return nil, fmt.Errorf("failed to login to PDU: %w", err)
+		}
+
+		p = q
 	}
 
 	p = &pdu.Cached{
@@ -351,6 +360,8 @@ func outletStatus(_ *cobra.Command, args []string) error {
 }
 
 func main() {
+	slog.SetLogLoggerLevel(slog.LevelDebug)
+
 	if err := rootCmd.Execute(); err != nil {
 		os.Exit(-1)
 	}

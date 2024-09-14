@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-var ErrNotFound = errors.New("failed to find outlet")
+var (
+	ErrNotFound = errors.New("failed to find outlet")
+	ErrInvalidOutletID = errors.New("invalid outlet ID")
+)
 
 var (
 	matchFirstCap = regexp.MustCompile("(.)([A-Z][a-z]+)")

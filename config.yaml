@@ -12,11 +12,11 @@ password: admin
 ttl: 1m
 
 # TLS settings for REST API
-tls:
-  cacert: certs/ca.crt 
-  cert: certs/server.crt
-  key: certs/server.key
-  insecure: false
+# tls:
+#   cacert: certs/ca.crt 
+#   cert: certs/server.crt
+#   key: certs/server.key
+#   insecure: false
 
 # Access control list
 acl:

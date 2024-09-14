@@ -32,3 +32,9 @@ type PDU interface {
 	Temperature() (float64, error)
 	WhoAmI() (string, error)
 }
+
+type LoginPDU interface {
+	Login(username, password string) error
+	Logout() error
+	WithLogin(username, password string, cb func()) error
+}

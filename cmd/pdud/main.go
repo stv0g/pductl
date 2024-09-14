@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	p   pdu.PDU
+	p   *pdu.Cached
 	cfg *pdu.Config
 
 	// Commands
@@ -32,7 +32,6 @@ var (
 		Use:               "pdud",
 		Short:             "A command line utility, REST API and Prometheus Exporter for Baytech PDUs",
 		DisableAutoGenTag: true,
-		PreRunE:           setupMetrics,
 		RunE:              daemon,
 	}
 
@@ -75,7 +74,7 @@ func preRun(cmd *cobra.Command, args []string) (err error) {
 		return fmt.Errorf("failed to parse configuration: %w", err)
 	}
 
-	q, err := baytech.NewPDU(cfg.Address, cfg.Username, cfg.Password)
+	q, err := baytech.NewPDU(cfg.Address)
 	if err != nil {
 		return err
 	}
@@ -96,183 +95,203 @@ func postRun(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func withStatus(cb func(sts *pdu.Status) float64) func() float64 {
-	return func() float64 {
-		sts, _ := p.Status()
-		return cb(sts)
-	}
-}
+func setupMetrics() {
+	withStatus := func(cb func(sts *pdu.Status)) {		
+		var sts *pdu.Status
+		var err error
 
-func withBoolStatus(cb func(sts *pdu.Status) bool) func() float64 {
-	return func() float64 {
-		sts, _ := p.Status()
-		if cb(sts) {
-			return 1
+		if p.IsValid(true) {
+			sts, err = p.Status(true)
+		} else if q, ok := p.PDU.(pdu.LoginPDU); ok {
+			q.WithLogin(cfg.Username, cfg.Password, func() {
+				sts, err = p.Status(true)
+			})
 		} else {
-			return 0
+			sts, err = p.Status(true)
+		}
+
+		if err == nil {
+			cb(sts)	
 		}
 	}
-}
 
-func setupMetrics(_ *cobra.Command, _ []string) error {
-	sts, err := p.Status()
-	if err != nil {
-		return fmt.Errorf("failed to get PDU status: %w", err)
+	withFloatStatus := func(cb func(sts *pdu.Status) float64) func() (f float64) {
+		return func() (f float64) {
+			withStatus(func(sts *pdu.Status) {
+				f = cb(sts)
+			})
+			return f
+		}
+	}
+	
+	withBoolStatus := func(cb func(sts *pdu.Status) bool) func() float64 {
+		return func() (f float64) {
+			withStatus(func(sts *pdu.Status) {
+				if cb(sts) {
+					f = 1
+				} else {
+					f = 0
+				}
+			})
+			return f
+		}
 	}
 
 	promauto.NewGaugeFunc(prometheus.GaugeOpts{
 		Name: "temperature",
-	}, withStatus(func(sts *pdu.Status) float64 {
-		return float64(sts.Temp)
+	}, withFloatStatus(func(sts *pdu.Status) float64 {
+		return float64(sts.Temperature)
 	}))
 
 	promauto.NewCounterFunc(prometheus.CounterOpts{
 		Name: "total_kwh",
-	}, withStatus(func(sts *pdu.Status) float64 {
+	}, withFloatStatus(func(sts *pdu.Status) float64 {
 		return float64(sts.TotalKwh)
 	}))
 
-	for i, breaker := range sts.Breakers {
-		labels := prometheus.Labels{
-			"name": breaker.Name,
+	withStatus(func(sts *pdu.Status) {
+		for i, breaker := range sts.Breakers {
+			labels := prometheus.Labels{
+				"name": breaker.Name,
+			}
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Name:        "true_rms_current",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Breakers[i].TrueRMSCurrent)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Name:        "peak_rms_current",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Breakers[i].PeakRMSCurrent)
+			}))
 		}
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Name:        "true_rms_current",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Breakers[i].TrueRMSCurrent)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Name:        "peak_rms_current",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Breakers[i].PeakRMSCurrent)
-		}))
-	}
-
-	for i, group := range sts.Groups {
-		labels := prometheus.Labels{
-			"name":       group.Name,
-			"id":         fmt.Sprint(group.ID),
-			"breaker_id": fmt.Sprint(group.BreakerID),
+	
+		for i, group := range sts.Groups {
+			labels := prometheus.Labels{
+				"name":       group.Name,
+				"id":         fmt.Sprint(group.ID),
+				"breaker_id": fmt.Sprint(group.BreakerID),
+			}
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "group",
+				Name:        "true_rms_current",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Groups[i].TrueRMSCurrent)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "group",
+				Name:        "peak_rms_current",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Groups[i].PeakRMSCurrent)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "group",
+				Name:        "avg_power",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Groups[i].AveragePower)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "group",
+				Name:        "va",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Groups[i].VoltAmps)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "group",
+				Name:        "true_rms_voltage",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Groups[i].TrueRMSCurrent)
+			}))
 		}
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "group",
-			Name:        "true_rms_current",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Groups[i].TrueRMSCurrent)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "group",
-			Name:        "peak_rms_current",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Groups[i].PeakRMSCurrent)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "group",
-			Name:        "avg_power",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Groups[i].AveragePower)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "group",
-			Name:        "va",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Groups[i].VoltAmps)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "group",
-			Name:        "true_rms_voltage",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Groups[i].TrueRMSCurrent)
-		}))
-	}
-
-	for i, outlet := range sts.Outlets {
-		labels := prometheus.Labels{
-			"name":       outlet.Name,
-			"id":         fmt.Sprint(outlet.ID),
-			"group_id":   fmt.Sprint(outlet.GroupID),
-			"breaker_id": fmt.Sprint(outlet.BreakerID),
+	
+		for i, outlet := range sts.Outlets {
+			labels := prometheus.Labels{
+				"name":       outlet.Name,
+				"id":         fmt.Sprint(outlet.ID),
+				"group_id":   fmt.Sprint(outlet.GroupID),
+				"breaker_id": fmt.Sprint(outlet.BreakerID),
+			}
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "outlet",
+				Name:        "true_rms_current",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Outlets[i].TrueRMSCurrent)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "outlet",
+				Name:        "peak_rms_current",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Outlets[i].PeakRMSCurrent)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "outlet",
+				Name:        "avg_power",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Outlets[i].AveragePower)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "outlet",
+				Name:        "va",
+				ConstLabels: labels,
+			}, withFloatStatus(func(sts *pdu.Status) float64 {
+				return float64(sts.Outlets[i].VoltAmps)
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "outlet",
+				Name:        "state",
+				ConstLabels: labels,
+			}, withBoolStatus(func(sts *pdu.Status) bool {
+				return sts.Outlets[i].State
+			}))
+	
+			promauto.NewGaugeFunc(prometheus.GaugeOpts{
+				Namespace:   "pdu",
+				Subsystem:   "outlet",
+				Name:        "locked",
+				ConstLabels: labels,
+			}, withBoolStatus(func(sts *pdu.Status) bool {
+				return sts.Outlets[i].Locked
+			}))
 		}
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "outlet",
-			Name:        "true_rms_current",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Outlets[i].TrueRMSCurrent)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "outlet",
-			Name:        "peak_rms_current",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Outlets[i].PeakRMSCurrent)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "outlet",
-			Name:        "avg_power",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Outlets[i].AveragePower)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "outlet",
-			Name:        "va",
-			ConstLabels: labels,
-		}, withStatus(func(sts *pdu.Status) float64 {
-			return float64(sts.Outlets[i].VoltAmps)
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "outlet",
-			Name:        "state",
-			ConstLabels: labels,
-		}, withBoolStatus(func(sts *pdu.Status) bool {
-			return sts.Outlets[i].State
-		}))
-
-		promauto.NewGaugeFunc(prometheus.GaugeOpts{
-			Namespace:   "pdu",
-			Subsystem:   "outlet",
-			Name:        "locked",
-			ConstLabels: labels,
-		}, withBoolStatus(func(sts *pdu.Status) bool {
-			return sts.Outlets[i].Locked
-		}))
-	}
-
-	slog.Info("Initialized metrics")
-
-	return nil
+	
+		daemonx.SdNotify(false, daemonx.SdNotifyReady)
+	
+		slog.Info("Initialized metrics")	
+	})
 }
 
 func daemon(_ *cobra.Command, _ []string) error {
@@ -285,10 +304,10 @@ func daemon(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("failed to initialize ACL: %w", err)
 	}
 
-	h := pdu.Handler(r, p, cfg.ACL)
+	h := pdu.Handler(r, p, cfg)
 
 	var tc *tls.Config
-	if cfg.TLS == nil {
+	if cfg.TLS.Cert == "" || cfg.TLS.Key == "" {
 		slog.Warn("No TLS configuration provided. API will be exposed unencrypted and unauthenticated!")
 	} else {
 		cer, err := tls.LoadX509KeyPair(cfg.TLS.Cert, cfg.TLS.Key)
@@ -325,7 +344,7 @@ func daemon(_ *cobra.Command, _ []string) error {
 
 	slog.Info("Listening", slog.String("address", cfg.Listen))
 
-	daemonx.SdNotify(false, daemonx.SdNotifyReady)
+	go setupMetrics()
 
 	return listenAndServe(s)
 }

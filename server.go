@@ -18,18 +18,18 @@ var _ api.StrictServerInterface = (*Server)(nil)
 
 var (
 	ErrMissingClientCert = errors.New("missing client certificate")
-	ErrAccessDenied      = errors.New("ACL denies access")
+	ErrAccessDenied      = errors.New("access denied")
 )
 
 type Server struct {
 	PDU
-	ACL AccessControlList
+
+	config *Config
 }
 
-func Handler(mux *http.ServeMux, p PDU, acl AccessControlList) http.Handler {
+func Handler(mux *http.ServeMux, p PDU, cfg *Config) http.Handler {
 	svr := &Server{
 		PDU: p,
-		ACL: acl,
 	}
 
 	mwLog := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
@@ -43,7 +43,7 @@ func Handler(mux *http.ServeMux, p PDU, acl AccessControlList) http.Handler {
 	}
 
 	mwAuth := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
-		if len(acl) == 0 {
+		if len(cfg.ACL) == 0 {
 			return f
 		}
 
@@ -56,7 +56,7 @@ func Handler(mux *http.ServeMux, p PDU, acl AccessControlList) http.Handler {
 			operationID = toKebabCase(operationID)
 			outletID := api.OutletIDFromRequest(request)
 
-			if !acl.Check(commonName, operationID, outletID) {
+			if !cfg.ACL.Check(commonName, operationID, outletID) {
 				return nil, ErrAccessDenied
 			}
 
@@ -64,7 +64,27 @@ func Handler(mux *http.ServeMux, p PDU, acl AccessControlList) http.Handler {
 		}
 	}
 
-	si := api.NewStrictHandlerWithOptions(svr, []nethttp.StrictHTTPMiddlewareFunc{mwAuth, mwLog}, api.StrictHTTPServerOptions{
+	mwLogin := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
+		var p PDU = p
+		if q, ok := p.(*Cached); ok {
+			p = q.PDU
+		}
+
+		q, ok := p.(LoginPDU)
+		if !ok {
+			return f
+		}
+
+		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (response interface{}, err error) {
+			err = q.WithLogin(cfg.Username, cfg.Password, func() {
+				response, err = f(ctx, w, r, request)
+			})
+
+			return response, err
+		}
+	}
+
+	si := api.NewStrictHandlerWithOptions(svr, []nethttp.StrictHTTPMiddlewareFunc{mwLog, mwAuth, mwLogin}, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  errorHandlerFunc,
 		ResponseErrorHandlerFunc: errorHandlerFunc,
 	})

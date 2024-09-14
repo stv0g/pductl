@@ -236,9 +236,9 @@ components:
   schemas:
     Status:
       type: object
-      required: [temp, total_kwh, breakers, groups, outlets, switches]
+      required: [temperature, total_kwh, breakers, groups, outlets, switches]
       properties:
-        temp:
+        temperature:
           description: "Temperature [C]"
           type: number
         total_kwh:

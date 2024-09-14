@@ -103,8 +103,8 @@ type Status struct {
 	Outlets  []OutletStatus  `json:"outlets"`
 	Switches []bool          `json:"switches"`
 
-	// Temp Temperature [C]
-	Temp float32 `json:"temp"`
+	// Temperature Temperature [C]
+	Temperature float32 `json:"temperature"`
 
 	// TotalKwh Total energy [kWh]
 	TotalKwh float32 `json:"total_kwh"`
@@ -136,6 +136,12 @@ type LockOutletJSONBody = bool
 
 // SwitchOutletJSONBody defines parameters for SwitchOutlet.
 type SwitchOutletJSONBody = bool
+
+// StatusParams defines parameters for Status.
+type StatusParams struct {
+	// Detailed Detailed
+	Detailed *Detailed `form:"detailed,omitempty" json:"detailed,omitempty"`
+}
 
 // LockOutletJSONRequestBody defines body for LockOutlet for application/json ContentType.
 type LockOutletJSONRequestBody = LockOutletJSONBody

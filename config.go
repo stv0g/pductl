@@ -25,9 +25,9 @@ type Config struct {
 		Cert     string `mapstructure:"cert"`
 		Key      string `mapstructure:"key"`
 		Insecure bool   `mapstructure:"insecure"`
-	} `mapstructure:"tls"`
+	} `mapstructure:"tls,omitempty"`
 
-	ACL AccessControlList `mapstructure:"acl"`
+	ACL AccessControlList `mapstructure:"acl,omitempty"`
 }
 
 func ParseConfig(flags *flag.FlagSet) (*Config, error) {
@@ -37,7 +37,6 @@ func ParseConfig(flags *flag.FlagSet) (*Config, error) {
 	v.SetDefault("password", "admin")
 	v.SetDefault("ttl", DefaultTTL)
 	v.SetDefault("listen", ":8080")
-	v.SetDefault("tls.insecure", false)
 
 	v.SetConfigType("yaml")
 
