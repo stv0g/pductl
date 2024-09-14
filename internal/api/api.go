@@ -9,8 +9,6 @@ func OutletIDFromRequest(r any) string {
 	switch r := r.(type) {
 	case *LockOutletRequestObject:
 		return r.Id
-	case *StatusOutletRequestObject:
-		return r.Id
 	case *SwitchOutletRequestObject:
 		return r.Id
 	case *RebootOutletRequestObject:

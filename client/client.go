@@ -91,8 +91,10 @@ func (c *Client) RebootOutlet(id string) error {
 	return nil
 }
 
-func (c *Client) Status() (*pdu.Status, error) {
-	r, err := c.client.StatusWithResponse(c.ctx)
+func (c *Client) Status(detailed bool) (*pdu.Status, error) {
+	r, err := c.client.StatusWithResponse(c.ctx, &api.StatusParams{
+		Detailed: &detailed,
+	})
 	if err != nil {
 		return nil, err
 	} else if p := r.JSON401; p != nil {
@@ -104,40 +106,6 @@ func (c *Client) Status() (*pdu.Status, error) {
 	}
 
 	return r.JSON200, nil
-}
-
-func (c *Client) StatusOutlet(id string) (*pdu.OutletStatus, error) {
-	r, err := c.client.StatusOutletWithResponse(c.ctx, id)
-	if err != nil {
-		return nil, err
-	} else if p := r.JSON400; p != nil {
-		return nil, errors.New(p.Error)
-	} else if p := r.JSON401; p != nil {
-		return nil, errors.New(p.Error)
-	} else if p := r.JSON403; p != nil {
-		return nil, errors.New(p.Error)
-	} else if p := r.JSON404; p != nil {
-		return nil, errors.New(p.Error)
-	} else if p := r.JSON500; p != nil {
-		return nil, errors.New(p.Error)
-	}
-
-	return r.JSON200, nil
-}
-
-func (c *Client) StatusOutletAll() ([]pdu.OutletStatus, error) {
-	r, err := c.client.StatusOutletAllWithResponse(c.ctx)
-	if err != nil {
-		return nil, err
-	} else if p := r.JSON401; p != nil {
-		return nil, errors.New(p.Error)
-	} else if p := r.JSON401; p != nil {
-		return nil, errors.New(p.Error)
-	} else if p := r.JSON500; p != nil {
-		return nil, errors.New(p.Error)
-	}
-
-	return *r.JSON200, nil
 }
 
 func (c *Client) ClearMaximumCurrents() error {

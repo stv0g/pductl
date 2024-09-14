@@ -27,10 +27,14 @@ type PDU interface {
 	SwitchOutlet(id string, state bool) (err error)
 	LockOutlet(id string, state bool) (err error)
 	RebootOutlet(id string) error
-	Status() (*Status, error)
-	StatusOutlet(id string) (*OutletStatus, error)
-	StatusOutletAll() ([]OutletStatus, error)
+	Status(detailed bool) (*Status, error)
 	ClearMaximumCurrents() error
 	Temperature() (float64, error)
 	WhoAmI() (string, error)
+}
+
+type LoginPDU interface {
+	Login(username, password string) error
+	Logout() error
+	WithLogin(username, password string, cb func()) error
 }

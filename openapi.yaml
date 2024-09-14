@@ -16,6 +16,8 @@ servers:
 - url: /v1
 paths:
   /status:
+    parameters:
+      - $ref: '#/components/parameters/detailed'
     get:
       summary: Get status of PDU
       operationId: status
@@ -26,26 +28,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Status'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        403:
-          $ref: '#/components/responses/Forbidden'
-        500:
-          $ref: '#/components/responses/InternalServerError'
-
-  /status/outlets:
-    get:
-      summary: Get status of PDU outlets
-      operationId: status-outlet-all
-      responses:
-        200:
-          description: Successful operation
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/OutletStatus'
         401:
           $ref: '#/components/responses/Unauthorized'
         403:
@@ -112,32 +94,6 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         403:
           $ref: '#/components/responses/Forbidden'
-        500:
-          $ref: '#/components/responses/InternalServerError'
-
-  /outlet/{id}/status:
-    parameters:
-      - $ref: '#/components/parameters/id'
-    get:
-      tags:
-      - outlet
-      summary: Switch state of outlet
-      operationId: status-outlet
-      responses:
-        200:
-          description: Successful operation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/OutletStatus'
-        400:
-          $ref: '#/components/responses/BadRequest'
-        401:
-          $ref: '#/components/responses/Unauthorized'
-        403:
-          $ref: '#/components/responses/Forbidden'
-        404:
-          $ref: '#/components/responses/NotFound'
         500:
           $ref: '#/components/responses/InternalServerError'
 
@@ -268,12 +224,21 @@ components:
       schema:
         type: string
 
+    detailed:
+      name: detailed
+      in: query
+      description: Detailed
+      required: false
+      schema:
+        type: boolean
+        default: false
+
   schemas:
     Status:
       type: object
-      required: [temp, total_kwh, breakers, groups, outlets, switches]
+      required: [temperature, total_kwh, breakers, groups, outlets, switches]
       properties:
-        temp:
+        temperature:
           description: "Temperature [C]"
           type: number
         total_kwh:

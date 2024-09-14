@@ -18,18 +18,18 @@ var _ api.StrictServerInterface = (*Server)(nil)
 
 var (
 	ErrMissingClientCert = errors.New("missing client certificate")
-	ErrAccessDenied      = errors.New("ACL denies access")
+	ErrAccessDenied      = errors.New("access denied")
 )
 
 type Server struct {
 	PDU
-	ACL AccessControlList
+
+	config *Config
 }
 
-func Handler(mux *http.ServeMux, p PDU, acl AccessControlList) http.Handler {
+func Handler(mux *http.ServeMux, p PDU, cfg *Config) http.Handler {
 	svr := &Server{
 		PDU: p,
-		ACL: acl,
 	}
 
 	mwLog := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
@@ -43,7 +43,7 @@ func Handler(mux *http.ServeMux, p PDU, acl AccessControlList) http.Handler {
 	}
 
 	mwAuth := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
-		if len(acl) == 0 {
+		if len(cfg.ACL) == 0 {
 			return f
 		}
 
@@ -56,7 +56,7 @@ func Handler(mux *http.ServeMux, p PDU, acl AccessControlList) http.Handler {
 			operationID = toKebabCase(operationID)
 			outletID := api.OutletIDFromRequest(request)
 
-			if !acl.Check(commonName, operationID, outletID) {
+			if !cfg.ACL.Check(commonName, operationID, outletID) {
 				return nil, ErrAccessDenied
 			}
 
@@ -64,7 +64,27 @@ func Handler(mux *http.ServeMux, p PDU, acl AccessControlList) http.Handler {
 		}
 	}
 
-	si := api.NewStrictHandlerWithOptions(svr, []nethttp.StrictHTTPMiddlewareFunc{mwAuth, mwLog}, api.StrictHTTPServerOptions{
+	mwLogin := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
+		var p PDU = p
+		if q, ok := p.(*Cached); ok {
+			p = q.PDU
+		}
+
+		q, ok := p.(LoginPDU)
+		if !ok {
+			return f
+		}
+
+		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (response interface{}, err error) {
+			err = q.WithLogin(cfg.Username, cfg.Password, func() {
+				response, err = f(ctx, w, r, request)
+			})
+
+			return response, err
+		}
+	}
+
+	si := api.NewStrictHandlerWithOptions(svr, []nethttp.StrictHTTPMiddlewareFunc{mwLog, mwAuth, mwLogin}, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  errorHandlerFunc,
 		ResponseErrorHandlerFunc: errorHandlerFunc,
 	})
@@ -103,7 +123,12 @@ func errorHandlerFunc(w http.ResponseWriter, r *http.Request, err error) {
 // Get status of PDU
 // (GET /status)
 func (p *Server) Status(ctx context.Context, request api.StatusRequestObject) (api.StatusResponseObject, error) {
-	sts, err := p.PDU.Status()
+	detailed := false
+	if d := request.Params.Detailed; d != nil {
+		detailed = *d
+	}
+
+	sts, err := p.PDU.Status(detailed)
 	if err != nil {
 		return api.Status500JSONResponse{
 			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
@@ -113,21 +138,6 @@ func (p *Server) Status(ctx context.Context, request api.StatusRequestObject) (a
 	}
 
 	return api.Status200JSONResponse(*sts), nil
-}
-
-// Get status of PDU outlets
-// (GET /status/outlets)
-func (p *Server) StatusOutletAll(ctx context.Context, request api.StatusOutletAllRequestObject) (api.StatusOutletAllResponseObject, error) {
-	sts, err := p.PDU.StatusOutletAll()
-	if err != nil {
-		return api.StatusOutletAll500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
-		}, nil
-	}
-
-	return api.StatusOutletAll200JSONResponse(sts), nil
 }
 
 // Get temperature of PDU
@@ -176,21 +186,6 @@ func (s *Server) ClearMaximumCurrents(ctx context.Context, request api.ClearMaxi
 	}
 
 	return api.ClearMaximumCurrents200Response{}, nil
-}
-
-// Get status of PDU outlet
-// (GET /outlet/{id}/status)
-func (p *Server) StatusOutlet(ctx context.Context, request api.StatusOutletRequestObject) (api.StatusOutletResponseObject, error) {
-	sts, err := p.PDU.StatusOutlet(request.Id)
-	if err != nil {
-		return api.StatusOutlet500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
-		}, nil
-	}
-
-	return api.StatusOutlet200JSONResponse(*sts), nil
 }
 
 // Switch lock state of outlet

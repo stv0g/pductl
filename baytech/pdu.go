@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"sync"
 
 	"go.bug.st/serial"
 
@@ -33,11 +34,13 @@ const (
 	promptReady    = "MMP-14>"
 	promptPassword = "Enter Password: "
 	promptUsername = "Enter user name: "
+	promptInvalidPassword = "Invalid user/password!"
 )
 
 var (
 	ErrDecode          = errors.New("failed to decode")
-	ErrInvalidOutletID = errors.New("invalid outlet ID")
+	ErrLoginRequired   = errors.New("login required")
+	ErrInvalidPassword = errors.New("invalid password")
 
 	reTemperature   = regexp.MustCompile(`(?m)^Int\. Temp:\s*([0-9\.]+)\s*F`)
 	reWhoami        = regexp.MustCompile(`(?m)^Current User:\s*([A-Za-z0-9-]+)\s*$`)
@@ -45,29 +48,25 @@ var (
 	reStatusSwitch  = regexp.MustCompile(`(?m)^Switch 1: (Open|Closed) 2: (Open|Closed)`)
 	reStatusBreaker = regexp.MustCompile(`(?m)^\|\s*(CKT[1-2]|Input [A-Z]|Circuit M[1-4])\s*\|\s*([0-9\.]+)\s+Amps\s*\|\s*([0-9\.]+)\s+Amps\s*\|\s*$`)
 	reStatusGroup   = regexp.MustCompile(`(?m)^\|\s*(CKT[1-2]|Input [A-Z]|Circuit M[1-4])\s*\|\s*([0-9\.]+)\s+Amps\s*\|\s*([0-9\.]+)\s+Amps\s*\|\s*([0-9\.]+)\s+Volts\s*\|\s*([0-9\.]+)\s+Watts\s*\|\s*([0-9\.]+)\s+VA\s*\|`)
-	reOStatusOutlet = regexp.MustCompile(`(?m)^\|\s*([A-Za-z0-9- ]+?)\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+V\s*\|\s*([0-9\.]+)\s+W\s*\|\s*([0-9\.]+)\s+VA\s*\|\s*(On|Off)\s*?(Locked|)\s*\|`)
+	reOstatusOutlet = regexp.MustCompile(`(?m)^\|\s*([A-Za-z0-9- ]+?)\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+V\s*\|\s*([0-9\.]+)\s+W\s*\|\s*([0-9\.]+)\s+VA\s*\|\s*(On|Off)\s*?(Locked|)\s*\|`)
 )
 
 type OutletID string
 
 type PDU struct {
-	Username string
-	Password string
-
 	conn    io.ReadWriteCloser
 	timeout time.Duration
+	mu sync.Mutex
+	muLogin sync.Mutex
 }
 
-func NewPDU(uri string, username, password string) (p *PDU, err error) {
+func NewPDU(uri string) (p *PDU, err error) {
 	u, err := url.Parse(uri)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse URL: %w", err)
 	}
 
 	p = &PDU{
-		Username: username,
-		Password: password,
-
 		timeout: 300 * time.Millisecond,
 	}
 
@@ -95,7 +94,15 @@ func NewPDU(uri string, username, password string) (p *PDU, err error) {
 }
 
 func (p *PDU) Close() error {
-	return p.conn.Close()
+	if err := p.Logout(); err != nil {
+		return fmt.Errorf("failed to logout: %w", err)
+	}
+
+	if err := p.conn.Close(); err != nil {
+		return fmt.Errorf("failed to close: %w", err)
+	}
+
+	return nil
 }
 
 func (p *PDU) SwitchOutlet(idStr string, state bool) (err error) {
@@ -115,7 +122,7 @@ func (p *PDU) SwitchOutlet(idStr string, state bool) (err error) {
 func (p *PDU) LockOutlet(idStr string, state bool) (err error) {
 	id, err := p.lookupID(idStr)
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidOutletID, err)
+		return fmt.Errorf("%w: %s", pdu.ErrInvalidOutletID, err)
 	}
 
 	if state {
@@ -129,14 +136,14 @@ func (p *PDU) LockOutlet(idStr string, state bool) (err error) {
 func (p *PDU) RebootOutlet(idStr string) error {
 	id, err := p.lookupID(idStr)
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrInvalidOutletID, err)
+		return fmt.Errorf("%w: %s", pdu.ErrInvalidOutletID, err)
 	}
 
 	_, err = p.execute("Reboot %d", id)
 	return err
 }
 
-func (p *PDU) Status() (*pdu.Status, error) {
+func (p *PDU) Status(detailed bool) (*pdu.Status, error) {
 	sts := &pdu.Status{}
 
 	out, err := p.execute("Status")
@@ -168,7 +175,7 @@ func (p *PDU) Status() (*pdu.Status, error) {
 		return sts, fmt.Errorf("%w temp: %s", ErrDecode, err)
 	}
 
-	sts.Temp = float32(f-32) * 5 / 9
+	sts.Temperature = float32(f-32) * 5 / 9
 
 	// Switches
 	m = reStatusSwitch.FindStringSubmatch(out)
@@ -259,36 +266,24 @@ func (p *PDU) Status() (*pdu.Status, error) {
 		sts.Groups = append(sts.Groups, group)
 	}
 
-	if sts.Outlets, err = p.StatusOutletAll(); err != nil {
-		return sts, err
+	if detailed {
+		if sts.Outlets, err = p.statusOutlets(); err != nil {
+			return nil, err
+		}
 	}
 
 	return sts, nil
 }
 
-func (p *PDU) StatusOutlet(idStr string) (*pdu.OutletStatus, error) {
-	id, err := p.lookupID(idStr)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidOutletID, err)
-	}
-
-	outlets, err := p.StatusOutletAll()
-	if err != nil {
-		return nil, fmt.Errorf("Failed to control outlet: %w", err)
-	}
-
-	return &outlets[id-1], nil
-}
-
-func (p *PDU) StatusOutletAll() ([]pdu.OutletStatus, error) {
+func (p *PDU) statusOutlets() ([]pdu.OutletStatus, error) {
 	outlets := []pdu.OutletStatus{}
 
-	out, err := p.execute("OStatus")
+	out, err := p.execute("Ostatus")
 	if err != nil {
 		return nil, err
 	}
 
-	n := reOStatusOutlet.FindAllStringSubmatch(out, -1)
+	n := reOstatusOutlet.FindAllStringSubmatch(out, -1)
 	if n == nil {
 		return nil, fmt.Errorf("%w: groups", ErrDecode)
 	}
@@ -381,6 +376,9 @@ func (p *PDU) Temperature() (float64, error) {
 
 func (p *PDU) WhoAmI() (string, error) {
 	out, err := p.execute("Whoami")
+	if err != nil {
+		return "", err
+	}
 
 	m := reWhoami.FindStringSubmatch(out)
 	if m == nil {
@@ -390,29 +388,167 @@ func (p *PDU) WhoAmI() (string, error) {
 	return strings.TrimSpace(m[1]), err
 }
 
+func (p *PDU) WithLogin(username, password string, cb func()) error {
+	p.muLogin.Lock()
+	defer p.muLogin.Unlock()
+
+	if err := p.Login(username, password); err != nil {
+		return fmt.Errorf("failed to login: %w", err)
+	}
+
+	cb()
+
+	if err := p.Logout(); err != nil {
+		return fmt.Errorf("failed to logout: %w", err)
+	}
+
+	return nil
+}
+
+func (p *PDU) Login(username, password string) error {
+	if user, err := p.WhoAmI(); err != nil {
+		if !errors.Is(err, ErrLoginRequired) {
+			return err
+		}
+	} else if user != username {
+		slog.Debug("Already logged in with wrong user. Logging out...", slog.String("username", user))
+		if err := p.Logout(); err != nil {
+			return err
+		}
+	} else {
+		slog.Debug("Already logged in", slog.String("username", username))
+		return nil // Already logged in
+	}
+
+	slog.Debug("Logging in", slog.String("username", username))
+
+	str := ""
+	sentUsername := false
+	sentPassword := false
+
+	if _, err := p.communicate(func(buf string) (bool, string, error) {
+		str += buf
+
+		switch {
+		case strings.HasSuffix(str, promptReady):
+			return true, "", nil
+
+		case strings.HasSuffix(str, promptUsername):
+			if err := p.send(username); err != nil {
+				return false, "", err
+			}
+
+			sentUsername = true
+
+		case strings.HasSuffix(str, promptPassword):
+			if err := p.send(password); err != nil {
+				return false, "", err
+			}
+
+			sentPassword = true
+
+		case strings.HasSuffix(str, promptInvalidPassword):
+			if sentUsername && sentPassword {
+				return false, "", ErrInvalidPassword
+			}
+		}
+
+		return false, "", nil
+	}); err != nil {
+		return err
+	}
+
+	user, err := p.WhoAmI()
+	if err != nil {
+		return err
+	}
+
+	slog.Debug("Logged in", slog.String("username", user))
+
+	return err
+}
+
+func (p *PDU) Logout() error {
+	_, err := p.execute("Logout")
+	return err
+}
+
 func (p *PDU) send(cmd string) error {
 	_, err := p.conn.Write([]byte(cmd + "\r\n"))
 	return err
 }
 
 func (p *PDU) execute(cmd string, args ...any) (string, error) {
-	opts := []any{slog.String("command", cmd)}
+	cmd = fmt.Sprintf(cmd, args...)
+	str := ""
+	sent := false
+
+	started := time.Now()
+
+	res, err := p.communicate(func(buf string) (bool, string, error) {
+		str += buf
+
+		// There is no prompt after logout
+		if sent == true && cmd == "Logout" {
+			if str == cmd {
+				time.Sleep(500 * time.Millisecond)
+				return true, "", nil
+			}
+
+			return false, "", nil
+		}
+
+		switch {
+		case strings.HasSuffix(str, promptReady):
+			if sent {
+				str = strings.TrimPrefix(str, cmd)
+				str = strings.TrimSuffix(str, "\r\n"+promptReady)
+				str = strings.TrimSpace(str)
+
+				return true, str, nil
+			}
+			
+			if err := p.send(cmd); err != nil {
+				return false, "", err
+			}
+
+			sent = true
+			str = ""
+
+		case strings.HasSuffix(str, promptUsername), strings.HasSuffix(str, promptPassword):
+			return false, "", ErrLoginRequired 
+		}
+
+		return false, "", nil
+	})
+
+	finished := time.Now()
+
+	opts := []any{slog.String("command", cmd), slog.Duration("took", finished.Sub(started))}
 	if len(args) > 0 {
 		opts = append(opts, slog.Any("args", args))
 	}
 
-	slog.Debug("Executing PDU command", opts...)
+	if err != nil {
+		opts = append(opts, slog.Any("error", err))
+	} else if res != "" {
+		opts = append(opts, slog.Int("#result", len(res)))
+	}
 
-	fCmd := fmt.Sprintf(cmd, args...)
-	fBuf := []byte{}
-	sBuf := ""
+	slog.Debug("Executed PDU command", opts...)
 
-	commandSend := false
+	return res, err
+}
 
-out:
+func (p *PDU) communicate(cb func(out string) (bool, string, error)) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if err := p.send(""); err != nil {
+		return "", err
+	}
+
 	for {
-		rBuf := make([]byte, 1024)
-
 		switch c := p.conn.(type) {
 		case *net.TCPConn:
 			if err := c.SetReadDeadline(time.Now().Add(p.timeout)); err != nil {
@@ -428,50 +564,25 @@ out:
 			return "", fmt.Errorf("unsupported connection type: %T", p.conn)
 		}
 
-		n, err := p.conn.Read(rBuf)
+		buf := make([]byte, 2048)
+		n, err := p.conn.Read(buf)
 		if err != nil {
 			if errors.Is(err, os.ErrDeadlineExceeded) {
-				if err := p.send(""); err != nil {
-					return "", err
-				}
-				continue
+				continue // Timeout
 			}
 
 			return "", err
 		} else if n == 0 {
-			continue
+			continue // Timeout
 		}
 
-		fBuf = append(fBuf, rBuf[:n]...)
-		sBuf = string(fBuf)
-
-		switch {
-		case strings.HasSuffix(sBuf, promptReady):
-			if commandSend {
-				break out
-			}
-
-			fBuf = nil
-			err = p.send(fCmd)
-			commandSend = true
-
-		case strings.HasSuffix(sBuf, promptUsername):
-			err = p.send(p.Username)
-
-		case strings.HasSuffix(sBuf, promptPassword):
-			err = p.send(p.Password)
-		}
-
-		if err != nil {
+		sbuf := string(buf[:n])
+		if done, out, err := cb(sbuf); err != nil {
 			return "", err
+		} else if done {
+			return out, nil
 		}
 	}
-
-	res := strings.TrimPrefix(sBuf, fCmd)
-	res = strings.TrimSuffix(res, "\r\n"+promptReady)
-	res = strings.TrimSpace(res)
-
-	return res, nil
 }
 
 func (p *PDU) lookupID(idStr string) (int, error) {
@@ -481,22 +592,10 @@ func (p *PDU) lookupID(idStr string) (int, error) {
 
 	if id, err := strconv.ParseInt(idStr, 0, 64); err == nil {
 		if id < 0 || id > NumOutlets {
-			return -1, ErrInvalidOutletID
+			return -1, pdu.ErrInvalidOutletID
 		}
 
 		return int(id), nil
-	}
-
-	// Attempt to lookup outlet by name
-	outlets, err := p.StatusOutletAll()
-	if err != nil {
-		return -1, fmt.Errorf("failed to get outlets from PDU: %w", err)
-	}
-
-	for i, outlet := range outlets {
-		if outlet.Name == idStr {
-			return i + 1, nil
-		}
 	}
 
 	return -1, fmt.Errorf("%w: %s", pdu.ErrNotFound, idStr)
