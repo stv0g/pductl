@@ -31,6 +31,12 @@ go run ./cmd/pductl \
     status
 ```
 
+### Forward Serial Port via TCP
+
+```shell
+socat -d tcp-listen:4142,reuseaddr,fork file:/dev/ttyUSB0,cs8,b9600,cstopb=0,raw,echo=0
+```
+
 ## Authors
 
 - [Steffen Vogel](mailto:post@steffenvogel.de) ([@stv0g](https://github.com/stv0g))
