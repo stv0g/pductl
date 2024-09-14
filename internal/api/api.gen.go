@@ -110,6 +110,9 @@ type Status struct {
 	TotalKwh float32 `json:"total_kwh"`
 }
 
+// Detailed defines model for detailed.
+type Detailed = bool
+
 // Id defines model for id.
 type Id = string
 
@@ -229,14 +232,8 @@ type ClientInterface interface {
 
 	SwitchOutlet(ctx context.Context, id Id, body SwitchOutletJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// StatusOutlet request
-	StatusOutlet(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// Status request
-	Status(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// StatusOutletAll request
-	StatusOutletAll(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+	Status(ctx context.Context, params *StatusParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// Temperature request
 	Temperature(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -317,32 +314,8 @@ func (c *Client) SwitchOutlet(ctx context.Context, id Id, body SwitchOutletJSONR
 	return c.Client.Do(req)
 }
 
-func (c *Client) StatusOutlet(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewStatusOutletRequest(c.Server, id)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) Status(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewStatusRequest(c.Server)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) StatusOutletAll(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewStatusOutletAllRequest(c.Server)
+func (c *Client) Status(ctx context.Context, params *StatusParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewStatusRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -532,42 +505,8 @@ func NewSwitchOutletRequestWithBody(server string, id Id, contentType string, bo
 	return req, nil
 }
 
-// NewStatusOutletRequest generates requests for StatusOutlet
-func NewStatusOutletRequest(server string, id Id) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "id", runtime.ParamLocationPath, id)
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/outlet/%s/status", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	return req, nil
-}
-
 // NewStatusRequest generates requests for Status
-func NewStatusRequest(server string) (*http.Request, error) {
+func NewStatusRequest(server string, params *StatusParams) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -585,31 +524,26 @@ func NewStatusRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
+	if params != nil {
+		queryValues := queryURL.Query()
 
-	return req, nil
-}
+		if params.Detailed != nil {
 
-// NewStatusOutletAllRequest generates requests for StatusOutletAll
-func NewStatusOutletAllRequest(server string) (*http.Request, error) {
-	var err error
+			if queryFrag, err := runtime.StyleParamWithLocation("form", true, "detailed", runtime.ParamLocationQuery, *params.Detailed); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
 
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
+		}
 
-	operationPath := fmt.Sprintf("/status/outlets")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
+		queryURL.RawQuery = queryValues.Encode()
 	}
 
 	req, err := http.NewRequest("GET", queryURL.String(), nil)
@@ -733,14 +667,8 @@ type ClientWithResponsesInterface interface {
 
 	SwitchOutletWithResponse(ctx context.Context, id Id, body SwitchOutletJSONRequestBody, reqEditors ...RequestEditorFn) (*SwitchOutletResponse, error)
 
-	// StatusOutletWithResponse request
-	StatusOutletWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*StatusOutletResponse, error)
-
 	// StatusWithResponse request
-	StatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*StatusResponse, error)
-
-	// StatusOutletAllWithResponse request
-	StatusOutletAllWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*StatusOutletAllResponse, error)
+	StatusWithResponse(ctx context.Context, params *StatusParams, reqEditors ...RequestEditorFn) (*StatusResponse, error)
 
 	// TemperatureWithResponse request
 	TemperatureWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*TemperatureResponse, error)
@@ -852,33 +780,6 @@ func (r SwitchOutletResponse) StatusCode() int {
 	return 0
 }
 
-type StatusOutletResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *OutletStatus
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON500      *InternalServerError
-}
-
-// Status returns HTTPResponse.Status
-func (r StatusOutletResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r StatusOutletResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 type StatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -898,31 +799,6 @@ func (r StatusResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r StatusResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type StatusOutletAllResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *[]OutletStatus
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON500      *InternalServerError
-}
-
-// Status returns HTTPResponse.Status
-func (r StatusOutletAllResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r StatusOutletAllResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1037,31 +913,13 @@ func (c *ClientWithResponses) SwitchOutletWithResponse(ctx context.Context, id I
 	return ParseSwitchOutletResponse(rsp)
 }
 
-// StatusOutletWithResponse request returning *StatusOutletResponse
-func (c *ClientWithResponses) StatusOutletWithResponse(ctx context.Context, id Id, reqEditors ...RequestEditorFn) (*StatusOutletResponse, error) {
-	rsp, err := c.StatusOutlet(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseStatusOutletResponse(rsp)
-}
-
 // StatusWithResponse request returning *StatusResponse
-func (c *ClientWithResponses) StatusWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*StatusResponse, error) {
-	rsp, err := c.Status(ctx, reqEditors...)
+func (c *ClientWithResponses) StatusWithResponse(ctx context.Context, params *StatusParams, reqEditors ...RequestEditorFn) (*StatusResponse, error) {
+	rsp, err := c.Status(ctx, params, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseStatusResponse(rsp)
-}
-
-// StatusOutletAllWithResponse request returning *StatusOutletAllResponse
-func (c *ClientWithResponses) StatusOutletAllWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*StatusOutletAllResponse, error) {
-	rsp, err := c.StatusOutletAll(ctx, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseStatusOutletAllResponse(rsp)
 }
 
 // TemperatureWithResponse request returning *TemperatureResponse
@@ -1291,67 +1149,6 @@ func ParseSwitchOutletResponse(rsp *http.Response) (*SwitchOutletResponse, error
 	return response, nil
 }
 
-// ParseStatusOutletResponse parses an HTTP response from a StatusOutletWithResponse call
-func ParseStatusOutletResponse(rsp *http.Response) (*StatusOutletResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &StatusOutletResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest OutletStatus
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON400 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
 // ParseStatusResponse parses an HTTP response from a StatusWithResponse call
 func ParseStatusResponse(rsp *http.Response) (*StatusResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -1368,53 +1165,6 @@ func ParseStatusResponse(rsp *http.Response) (*StatusResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Status
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON401 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON403 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON500 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseStatusOutletAllResponse parses an HTTP response from a StatusOutletAllWithResponse call
-func ParseStatusOutletAllResponse(rsp *http.Response) (*StatusOutletAllResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &StatusOutletAllResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest []OutletStatus
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1560,15 +1310,9 @@ type ServerInterface interface {
 	// Switch state of outlet
 	// (POST /outlet/{id}/state)
 	SwitchOutlet(w http.ResponseWriter, r *http.Request, id Id)
-	// Switch state of outlet
-	// (GET /outlet/{id}/status)
-	StatusOutlet(w http.ResponseWriter, r *http.Request, id Id)
 	// Get status of PDU
 	// (GET /status)
-	Status(w http.ResponseWriter, r *http.Request)
-	// Get status of PDU outlets
-	// (GET /status/outlets)
-	StatusOutletAll(w http.ResponseWriter, r *http.Request)
+	Status(w http.ResponseWriter, r *http.Request, params StatusParams)
 	// Get temperature of PDU
 	// (GET /temperature)
 	Temperature(w http.ResponseWriter, r *http.Request)
@@ -1679,53 +1423,25 @@ func (siw *ServerInterfaceWrapper) SwitchOutlet(w http.ResponseWriter, r *http.R
 	handler.ServeHTTP(w, r.WithContext(ctx))
 }
 
-// StatusOutlet operation middleware
-func (siw *ServerInterfaceWrapper) StatusOutlet(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	var err error
-
-	// ------------- Path parameter "id" -------------
-	var id Id
-
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StatusOutlet(w, r, id)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r.WithContext(ctx))
-}
-
 // Status operation middleware
 func (siw *ServerInterfaceWrapper) Status(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.Status(w, r)
-	}))
+	var err error
 
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
+	// Parameter object where we will unmarshal all parameters from the context
+	var params StatusParams
+
+	// ------------- Optional query parameter "detailed" -------------
+
+	err = runtime.BindQueryParameter("form", true, false, "detailed", r.URL.Query(), &params.Detailed)
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "detailed", Err: err})
+		return
 	}
 
-	handler.ServeHTTP(w, r.WithContext(ctx))
-}
-
-// StatusOutletAll operation middleware
-func (siw *ServerInterfaceWrapper) StatusOutletAll(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.StatusOutletAll(w, r)
+		siw.Handler.Status(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1883,9 +1599,7 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	m.HandleFunc("POST "+options.BaseURL+"/outlet/{id}/lock", wrapper.LockOutlet)
 	m.HandleFunc("POST "+options.BaseURL+"/outlet/{id}/reboot", wrapper.RebootOutlet)
 	m.HandleFunc("POST "+options.BaseURL+"/outlet/{id}/state", wrapper.SwitchOutlet)
-	m.HandleFunc("GET "+options.BaseURL+"/outlet/{id}/status", wrapper.StatusOutlet)
 	m.HandleFunc("GET "+options.BaseURL+"/status", wrapper.Status)
-	m.HandleFunc("GET "+options.BaseURL+"/status/outlets", wrapper.StatusOutletAll)
 	m.HandleFunc("GET "+options.BaseURL+"/temperature", wrapper.Temperature)
 	m.HandleFunc("GET "+options.BaseURL+"/whoami", wrapper.WhoAmI)
 
@@ -2145,71 +1859,8 @@ func (response SwitchOutlet500JSONResponse) VisitSwitchOutletResponse(w http.Res
 	return json.NewEncoder(w).Encode(response)
 }
 
-type StatusOutletRequestObject struct {
-	Id Id `json:"id"`
-}
-
-type StatusOutletResponseObject interface {
-	VisitStatusOutletResponse(w http.ResponseWriter) error
-}
-
-type StatusOutlet200JSONResponse OutletStatus
-
-func (response StatusOutlet200JSONResponse) VisitStatusOutletResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutlet400JSONResponse struct{ BadRequestJSONResponse }
-
-func (response StatusOutlet400JSONResponse) VisitStatusOutletResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(400)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutlet401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response StatusOutlet401JSONResponse) VisitStatusOutletResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutlet403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response StatusOutlet403JSONResponse) VisitStatusOutletResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutlet404JSONResponse struct{ NotFoundJSONResponse }
-
-func (response StatusOutlet404JSONResponse) VisitStatusOutletResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(404)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutlet500JSONResponse struct {
-	InternalServerErrorJSONResponse
-}
-
-func (response StatusOutlet500JSONResponse) VisitStatusOutletResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
 type StatusRequestObject struct {
+	Params StatusParams
 }
 
 type StatusResponseObject interface {
@@ -2248,51 +1899,6 @@ type Status500JSONResponse struct {
 }
 
 func (response Status500JSONResponse) VisitStatusResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(500)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutletAllRequestObject struct {
-}
-
-type StatusOutletAllResponseObject interface {
-	VisitStatusOutletAllResponse(w http.ResponseWriter) error
-}
-
-type StatusOutletAll200JSONResponse []OutletStatus
-
-func (response StatusOutletAll200JSONResponse) VisitStatusOutletAllResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(200)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutletAll401JSONResponse struct{ UnauthorizedJSONResponse }
-
-func (response StatusOutletAll401JSONResponse) VisitStatusOutletAllResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(401)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutletAll403JSONResponse struct{ ForbiddenJSONResponse }
-
-func (response StatusOutletAll403JSONResponse) VisitStatusOutletAllResponse(w http.ResponseWriter) error {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(403)
-
-	return json.NewEncoder(w).Encode(response)
-}
-
-type StatusOutletAll500JSONResponse struct {
-	InternalServerErrorJSONResponse
-}
-
-func (response StatusOutletAll500JSONResponse) VisitStatusOutletAllResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(500)
 
@@ -2409,15 +2015,9 @@ type StrictServerInterface interface {
 	// Switch state of outlet
 	// (POST /outlet/{id}/state)
 	SwitchOutlet(ctx context.Context, request SwitchOutletRequestObject) (SwitchOutletResponseObject, error)
-	// Switch state of outlet
-	// (GET /outlet/{id}/status)
-	StatusOutlet(ctx context.Context, request StatusOutletRequestObject) (StatusOutletResponseObject, error)
 	// Get status of PDU
 	// (GET /status)
 	Status(ctx context.Context, request StatusRequestObject) (StatusResponseObject, error)
-	// Get status of PDU outlets
-	// (GET /status/outlets)
-	StatusOutletAll(ctx context.Context, request StatusOutletAllRequestObject) (StatusOutletAllResponseObject, error)
 	// Get temperature of PDU
 	// (GET /temperature)
 	Temperature(ctx context.Context, request TemperatureRequestObject) (TemperatureResponseObject, error)
@@ -2571,35 +2171,11 @@ func (sh *strictHandler) SwitchOutlet(w http.ResponseWriter, r *http.Request, id
 	}
 }
 
-// StatusOutlet operation middleware
-func (sh *strictHandler) StatusOutlet(w http.ResponseWriter, r *http.Request, id Id) {
-	var request StatusOutletRequestObject
-
-	request.Id = id
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.StatusOutlet(ctx, request.(StatusOutletRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "StatusOutlet")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(StatusOutletResponseObject); ok {
-		if err := validResponse.VisitStatusOutletResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
 // Status operation middleware
-func (sh *strictHandler) Status(w http.ResponseWriter, r *http.Request) {
+func (sh *strictHandler) Status(w http.ResponseWriter, r *http.Request, params StatusParams) {
 	var request StatusRequestObject
+
+	request.Params = params
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.Status(ctx, request.(StatusRequestObject))
@@ -2614,30 +2190,6 @@ func (sh *strictHandler) Status(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(StatusResponseObject); ok {
 		if err := validResponse.VisitStatusResponse(w); err != nil {
-			sh.options.ResponseErrorHandlerFunc(w, r, err)
-		}
-	} else if response != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
-	}
-}
-
-// StatusOutletAll operation middleware
-func (sh *strictHandler) StatusOutletAll(w http.ResponseWriter, r *http.Request) {
-	var request StatusOutletAllRequestObject
-
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.StatusOutletAll(ctx, request.(StatusOutletAllRequestObject))
-	}
-	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "StatusOutletAll")
-	}
-
-	response, err := handler(r.Context(), w, r, request)
-
-	if err != nil {
-		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(StatusOutletAllResponseObject); ok {
-		if err := validResponse.VisitStatusOutletAllResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

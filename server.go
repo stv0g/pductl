@@ -103,7 +103,12 @@ func errorHandlerFunc(w http.ResponseWriter, r *http.Request, err error) {
 // Get status of PDU
 // (GET /status)
 func (p *Server) Status(ctx context.Context, request api.StatusRequestObject) (api.StatusResponseObject, error) {
-	sts, err := p.PDU.Status()
+	detailed := false
+	if d := request.Params.Detailed; d != nil {
+		detailed = *d
+	}
+
+	sts, err := p.PDU.Status(detailed)
 	if err != nil {
 		return api.Status500JSONResponse{
 			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
@@ -113,21 +118,6 @@ func (p *Server) Status(ctx context.Context, request api.StatusRequestObject) (a
 	}
 
 	return api.Status200JSONResponse(*sts), nil
-}
-
-// Get status of PDU outlets
-// (GET /status/outlets)
-func (p *Server) StatusOutletAll(ctx context.Context, request api.StatusOutletAllRequestObject) (api.StatusOutletAllResponseObject, error) {
-	sts, err := p.PDU.StatusOutletAll()
-	if err != nil {
-		return api.StatusOutletAll500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
-		}, nil
-	}
-
-	return api.StatusOutletAll200JSONResponse(sts), nil
 }
 
 // Get temperature of PDU
@@ -176,21 +166,6 @@ func (s *Server) ClearMaximumCurrents(ctx context.Context, request api.ClearMaxi
 	}
 
 	return api.ClearMaximumCurrents200Response{}, nil
-}
-
-// Get status of PDU outlet
-// (GET /outlet/{id}/status)
-func (p *Server) StatusOutlet(ctx context.Context, request api.StatusOutletRequestObject) (api.StatusOutletResponseObject, error) {
-	sts, err := p.PDU.StatusOutlet(request.Id)
-	if err != nil {
-		return api.StatusOutlet500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
-		}, nil
-	}
-
-	return api.StatusOutlet200JSONResponse(*sts), nil
 }
 
 // Switch lock state of outlet

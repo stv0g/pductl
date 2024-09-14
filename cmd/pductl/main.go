@@ -25,6 +25,8 @@ var (
 
 	cfg *pdu.Config
 
+	detailed = false
+
 	// Commands
 	rootCmd = &cobra.Command{
 		Use:               "pductl",
@@ -123,6 +125,9 @@ func init() {
 	pf.String("tls-cert", "", "Server certificate")
 	pf.String("tls-key", "", "Server key")
 	pf.Bool("tls-insecure", false, "Skip verification of server certificate")
+
+	pf = getStatusCmd.PersistentFlags()
+	pf.BoolVar(&detailed, "detailed", false, "Show detailed status")
 
 	rootCmd.PersistentPreRunE = preRun
 	rootCmd.PersistentPostRunE = postRun
@@ -234,7 +239,7 @@ func parseState(s string) (state bool, err error) {
 }
 
 func getStatus(_ *cobra.Command, _ []string) error {
-	sts, err := p.Status()
+	sts, err := p.Status(detailed)
 	if err != nil {
 		return fmt.Errorf("Failed to get status: %w", err)
 	}
@@ -313,16 +318,36 @@ func outletLock(_ *cobra.Command, args []string) error {
 }
 
 func outletStatus(_ *cobra.Command, args []string) error {
-	id := args[0]
-	sts, err := p.StatusOutlet(id)
+	arg := args[0]
+	sts, err := p.Status(true)
 	if err != nil {
 		return err
+	}
+
+	id := -1
+	if i, err := strconv.ParseInt(arg, 0, 64); err == nil {
+		id = int(i)
+	}
+
+	idx := -1
+	for i, o := range sts.Outlets {
+		if o.Name == arg {
+			idx = i
+		}
+
+		if id >= 0 && o.ID == id {
+			idx = i
+		}
+	}
+
+	if idx < 0 {
+		return pdu.ErrInvalidOutletID
 	}
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "   ")
 
-	return enc.Encode(sts)
+	return enc.Encode(sts.Outlets[idx])
 }
 
 func main() {
