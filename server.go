@@ -62,28 +62,7 @@ func Handler(mux *http.ServeMux, p PDU, cfg *Config) http.Handler {
 		}
 	}
 
-	mwLogin := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
-		q, ok := p.(LoginPDU)
-		if !ok {
-			return f
-		}
-
-		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (response interface{}, err error) {
-			if response, err = f(ctx, w, r, request); err != nil {
-				if errors.Is(err, ErrLoginRequired) {
-					if err := q.WithLogin(cfg.Username, cfg.Password, func() {
-						response, err = f(ctx, w, r, request)
-					}); err != nil {
-						return nil, err
-					}
-				}
-			}
-
-			return response, err
-		}
-	}
-
-	mws := []nethttp.StrictHTTPMiddlewareFunc{mwLog, mwAuth, mwLogin}
+	mws := []nethttp.StrictHTTPMiddlewareFunc{mwLog, mwAuth}
 	si := api.NewStrictHandlerWithOptions(svr, mws, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  errorHandlerFunc,
 		ResponseErrorHandlerFunc: errorHandlerFunc,
