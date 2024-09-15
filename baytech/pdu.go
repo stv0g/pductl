@@ -254,7 +254,7 @@ func (p *PDU) Status(detailed bool) (*pdu.Status, error) {
 
 		power, err := strconv.ParseFloat(g[6], 64)
 		if err != nil {
-			return sts, fmt.Errorf("%w group VA: %w", ErrDecode, err)
+			return sts, fmt.Errorf("%w group power: %w", ErrDecode, err)
 		}
 
 		group.TrueRMSCurrent = float32(cur)

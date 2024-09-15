@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/jedib0t/go-pretty/v6/table"
 	"github.com/jedib0t/go-pretty/v6/text"
@@ -81,7 +82,19 @@ func (s *Status) Print(f io.Writer, format string) {
 		return
 	}
 
-	s.PrintBreakers(f, format)
+	fmt.Fprintf(f, "Updated: %s\n", s.Timestamp.Format(time.RFC3339))
+	fmt.Fprintf(f, "Total Energy: %.0f kWh\n", s.TotalEnergy)
+	fmt.Fprintf(f, "Temperature: %.1f °C\n", s.Temperature)
+
+	if len(s.Switches) > 0 {
+		fmt.Fprintln(f)
+		s.PrintSwitches(f, format)
+	}
+
+	if len(s.Breakers) > 0 {
+		fmt.Fprintln(f)
+		s.PrintBreakers(f, format)
+	}
 
 	if len(s.Groups) > 0 {
 		fmt.Fprintln(f)
@@ -92,6 +105,28 @@ func (s *Status) Print(f io.Writer, format string) {
 		fmt.Fprintln(f)
 		s.PrintOutlets(f, format)
 	}
+
+	if age := time.Now().Sub(s.Timestamp); age > time.Minute {
+		fmt.Fprintln(f)
+		fmt.Fprintf(f, "Warning: data is stale. Updated %s ago\n", age)
+	}
+}
+
+func (s *Status) PrintSwitches(f io.Writer, format string) {
+	t := table.NewWriter()
+	t.AppendHeader(table.Row{
+		"Switch",
+		"State",
+	})
+
+	for i, sw := range s.Switches {
+		t.AppendRow(table.Row{
+			fmt.Sprintf("Switch %d", i),
+			sw,
+		})
+	}
+
+	renderTable(t, f, format)
 }
 
 func (s *Status) PrintBreakers(f io.Writer, format string) {
