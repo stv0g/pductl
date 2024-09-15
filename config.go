@@ -67,12 +67,11 @@ func ParseConfig(flags *flag.FlagSet) (*Config, error) {
 		}
 	} else {
 		v.SetConfigName("config")
-
-		v.AddConfigPath("/etc/pdud/")
-		v.AddConfigPath("$HOME/.pdud")
-		v.AddConfigPath(".")
 	}
 
+	v.AddConfigPath("/etc/pdud/")
+	v.AddConfigPath("$HOME/.pdud")
+	v.AddConfigPath(".")
 	v.SetEnvPrefix("pdu")
 	v.AutomaticEnv()
 
