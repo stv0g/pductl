@@ -9,7 +9,8 @@ pductl status [flags]
 ### Options
 
 ```
-  -h, --help   help for status
+      --detailed   Show detailed status
+  -h, --help       help for status
 ```
 
 ### Options inherited from parent commands
@@ -17,16 +18,19 @@ pductl status [flags]
 ```
       --address string      Address for PDU communication (default "tcp://10.208.1.1:4141")
       --config string       Path to YAML-formatted configuration file
+      --format string       Output format (default "pretty-rounded")
       --password string     password (default "admin")
       --tls-cacert string   Certificate Authority to validate client certificates against
       --tls-cert string     Server certificate
       --tls-insecure        Skip verification of server certificate
       --tls-key string      Server key
-      --ttl duration        Caching time-to-live. 0 disables caching (default -1ns)
       --username string     Username (default "admin")
 ```
 
 ### SEE ALSO
 
 * [pductl](pductl.md)	 - A command line utility, REST API and Prometheus Exporter for Baytech PDUs
+* [pductl status breakers](pductl_status_breakers.md)	 - Show PDU breaker status
+* [pductl status groups](pductl_status_groups.md)	 - Show PDU group status
+* [pductl status outlets](pductl_status_outlets.md)	 - Show PDU outlet status
 

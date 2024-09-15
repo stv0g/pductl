@@ -1,15 +1,15 @@
-## pductl outlet status
+## pductl temperature
 
-Get status of outlet
+Read current temperature
 
 ```
-pductl outlet status OUTLET [flags]
+pductl temperature [flags]
 ```
 
 ### Options
 
 ```
-  -h, --help   help for status
+  -h, --help   help for temperature
 ```
 
 ### Options inherited from parent commands
@@ -28,5 +28,5 @@ pductl outlet status OUTLET [flags]
 
 ### SEE ALSO
 
-* [pductl outlet](pductl_outlet.md)	 - Control outlets
+* [pductl](pductl.md)	 - A command line utility, REST API and Prometheus Exporter for Baytech PDUs
 

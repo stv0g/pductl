@@ -1,15 +1,15 @@
-## pductl outlet status
+## pductl status breakers
 
-Get status of outlet
+Show PDU breaker status
 
 ```
-pductl outlet status OUTLET [flags]
+pductl status breakers [flags]
 ```
 
 ### Options
 
 ```
-  -h, --help   help for status
+  -h, --help   help for breakers
 ```
 
 ### Options inherited from parent commands
@@ -17,6 +17,7 @@ pductl outlet status OUTLET [flags]
 ```
       --address string      Address for PDU communication (default "tcp://10.208.1.1:4141")
       --config string       Path to YAML-formatted configuration file
+      --detailed            Show detailed status
       --format string       Output format (default "pretty-rounded")
       --password string     password (default "admin")
       --tls-cacert string   Certificate Authority to validate client certificates against
@@ -28,5 +29,5 @@ pductl outlet status OUTLET [flags]
 
 ### SEE ALSO
 
-* [pductl outlet](pductl_outlet.md)	 - Control outlets
+* [pductl status](pductl_status.md)	 - Show PDU status
 
