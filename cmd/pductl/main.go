@@ -50,57 +50,72 @@ var (
 	}
 
 	statusCmd = &cobra.Command{
-		Use:   "status",
-		Short: "Show PDU status",
-		RunE:  status,
-		Args:  cobra.MaximumNArgs(1),
+		Use:                "status",
+		Short:              "Show PDU status",
+		RunE:               status,
+		Args:               cobra.MaximumNArgs(1),
+		PersistentPreRunE:  preRun,
+		PersistentPostRunE: postRun,
 	}
 
 	statusBreakerCmd = &cobra.Command{
-		Use:   "breakers",
-		Short: "Show PDU breaker status",
-		RunE:  status,
+		Use:     "breakers",
+		Aliases: []string{"breaker", "brk"},
+		Short:   "Show PDU breaker status",
+		RunE:    status,
 	}
 
 	statusGroupCmd = &cobra.Command{
-		Use:   "groups",
-		Short: "Show PDU group status",
-		RunE:  status,
+		Use:     "groups",
+		Aliases: []string{"group", "grp"},
+		Short:   "Show PDU group status",
+		RunE:    status,
 	}
 
 	statusOutletsCmd = &cobra.Command{
-		Use:   "outlets",
-		Short: "Show PDU outlet status",
-		RunE:  status,
+		Use:     "outlets",
+		Aliases: []string{"outlet"},
+		Short:   "Show PDU outlet status",
+		RunE:    status,
 	}
 
 	userCmd = &cobra.Command{
-		Use:   "user",
-		Short: "Manage users",
+		Use:                "user",
+		Short:              "Manage users",
+		PersistentPreRunE:  preRun,
+		PersistentPostRunE: postRun,
 	}
 
 	whoAmICmd = &cobra.Command{
-		Use:   "whoami",
-		Short: "Displays the current user name",
-		RunE:  whoAmI,
+		Use:                "whoami",
+		Short:              "Displays the current user name",
+		RunE:               whoAmI,
+		PersistentPreRunE:  preRun,
+		PersistentPostRunE: postRun,
 	}
 
 	tempCmd = &cobra.Command{
-		Use:     "temperature",
-		Aliases: []string{"temp"},
-		Short:   "Read current temperature",
-		RunE:    readTemp,
+		Use:                "temperature",
+		Aliases:            []string{"temp"},
+		Short:              "Read current temperature",
+		RunE:               temp,
+		PersistentPreRunE:  preRun,
+		PersistentPostRunE: postRun,
 	}
 
 	clearCmd = &cobra.Command{
-		Use:   "clear",
-		Short: "Reset the maximum detected current",
-		RunE:  clearMaximumCurrent,
+		Use:                "clear",
+		Short:              "Reset the maximum detected current",
+		RunE:               clearMaximumCurrent,
+		PersistentPreRunE:  preRun,
+		PersistentPostRunE: postRun,
 	}
 
 	outletCmd = &cobra.Command{
-		Use:   "outlet",
-		Short: "Control outlets",
+		Use:                "outlet",
+		Short:              "Control outlets",
+		PersistentPreRunE:  preRun,
+		PersistentPostRunE: postRun,
 	}
 
 	outletRebootCmd = &cobra.Command{
@@ -151,9 +166,6 @@ func init() {
 
 	pf = statusCmd.PersistentFlags()
 	pf.BoolVar(&detailed, "detailed", false, "Show detailed status")
-
-	rootCmd.PersistentPreRunE = preRun
-	rootCmd.PersistentPostRunE = postRun
 }
 
 func preRun(cmd *cobra.Command, args []string) (err error) {
@@ -298,7 +310,7 @@ func whoAmI(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func readTemp(_ *cobra.Command, _ []string) error {
+func temp(_ *cobra.Command, _ []string) error {
 	temp, err := p.Temperature()
 	if err != nil {
 		return fmt.Errorf("Failed to send command: %w", err)

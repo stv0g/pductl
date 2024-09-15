@@ -65,10 +65,10 @@ func init() {
 	pf.String("tls-key", "", "Server key")
 	pf.Bool("tls-insecure", false, "Skip verification of client certificates")
 
-	rootCmd.PersistentPreRunE = preRun
-	rootCmd.PersistentPostRunE = postRun
-
 	rootCmd.AddCommand(genDocs)
+
+	rootCmd.PreRunE = preRun
+	rootCmd.PostRunE = postRun
 }
 
 func preRun(cmd *cobra.Command, args []string) (err error) {
