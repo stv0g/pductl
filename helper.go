@@ -10,8 +10,10 @@ import (
 )
 
 var (
-	ErrNotFound = errors.New("failed to find outlet")
+	ErrNotFound        = errors.New("failed to find outlet")
 	ErrInvalidOutletID = errors.New("invalid outlet ID")
+	ErrLoginRequired   = errors.New("login required")
+	ErrInvalidPassword = errors.New("invalid password")
 )
 
 var (

@@ -6,7 +6,6 @@ package main
 import (
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -34,6 +33,7 @@ var (
 		Use:               "pductl",
 		Short:             "A command line utility, REST API and Prometheus Exporter for Baytech PDUs",
 		DisableAutoGenTag: true,
+		SilenceUsage:      true,
 	}
 
 	genDocs = &cobra.Command{
@@ -49,10 +49,29 @@ var (
 		},
 	}
 
-	getStatusCmd = &cobra.Command{
+	statusCmd = &cobra.Command{
 		Use:   "status",
 		Short: "Show PDU status",
-		RunE:  getStatus,
+		RunE:  status,
+		Args:  cobra.MaximumNArgs(1),
+	}
+
+	statusBreakerCmd = &cobra.Command{
+		Use:   "breakers",
+		Short: "Show PDU breaker status",
+		RunE:  status,
+	}
+
+	statusGroupCmd = &cobra.Command{
+		Use:   "groups",
+		Short: "Show PDU group status",
+		RunE:  status,
+	}
+
+	statusOutletsCmd = &cobra.Command{
+		Use:   "outlets",
+		Short: "Show PDU outlet status",
+		RunE:  status,
 	}
 
 	userCmd = &cobra.Command{
@@ -66,13 +85,14 @@ var (
 		RunE:  whoAmI,
 	}
 
-	readTempCmd = &cobra.Command{
-		Use:   "temp",
-		Short: "Read current temperature",
-		RunE:  readTemp,
+	tempCmd = &cobra.Command{
+		Use:     "temperature",
+		Aliases: []string{"temp"},
+		Short:   "Read current temperature",
+		RunE:    readTemp,
 	}
 
-	clearMaximumCurrentCmd = &cobra.Command{
+	clearCmd = &cobra.Command{
 		Use:   "clear",
 		Short: "Reset the maximum detected current",
 		RunE:  clearMaximumCurrent,
@@ -113,22 +133,23 @@ var (
 )
 
 func init() {
-	rootCmd.AddCommand(getStatusCmd, readTempCmd, clearMaximumCurrentCmd, outletCmd, userCmd, genDocs)
+	rootCmd.AddCommand(statusCmd, tempCmd, clearCmd, outletCmd, userCmd, genDocs)
 	userCmd.AddCommand(whoAmICmd)
+	statusCmd.AddCommand(statusBreakerCmd, statusGroupCmd, statusOutletsCmd)
 	outletCmd.AddCommand(outletLockCmd, outletRebootCmd, outletSwitchCmd, outletStatusCmd)
 
 	pf := rootCmd.PersistentFlags()
 	pf.String("config", "", "Path to YAML-formatted configuration file")
 	pf.String("address", "tcp://10.208.1.1:4141", "Address for PDU communication")
+	pf.String("format", "pretty-rounded", "Output format")
 	pf.String("username", "admin", "Username")
 	pf.String("password", "admin", "password")
-	pf.Duration("ttl", -1, "Caching time-to-live. 0 disables caching")
 	pf.String("tls-cacert", "", "Certificate Authority to validate client certificates against")
 	pf.String("tls-cert", "", "Server certificate")
 	pf.String("tls-key", "", "Server key")
 	pf.Bool("tls-insecure", false, "Skip verification of server certificate")
 
-	pf = getStatusCmd.PersistentFlags()
+	pf = statusCmd.PersistentFlags()
 	pf.BoolVar(&detailed, "detailed", false, "Show detailed status")
 
 	rootCmd.PersistentPreRunE = preRun
@@ -224,11 +245,6 @@ func newPDU(cfg *pdu.Config) (p pdu.PDU, err error) {
 		p = q
 	}
 
-	p = &pdu.Cached{
-		PDU: p,
-		TTL: cfg.TTL,
-	}
-
 	return p, err
 }
 
@@ -247,16 +263,28 @@ func parseState(s string) (state bool, err error) {
 	return state, nil
 }
 
-func getStatus(_ *cobra.Command, _ []string) error {
+func status(cmd *cobra.Command, args []string) error {
+	if cmd.Use == "outlets" {
+		detailed = true
+	}
+
 	sts, err := p.Status(detailed)
 	if err != nil {
 		return fmt.Errorf("Failed to get status: %w", err)
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "   ")
+	switch cmd.Use {
+	case "status":
+		sts.Print(os.Stdout, cfg.Format)
+	case "outlets":
+		sts.PrintOutlets(os.Stdout, cfg.Format)
+	case "groups":
+		sts.PrintGroups(os.Stdout, cfg.Format)
+	case "breakers":
+		sts.PrintBreakers(os.Stdout, cfg.Format)
+	}
 
-	return enc.Encode(sts)
+	return nil
 }
 
 func whoAmI(_ *cobra.Command, _ []string) error {
@@ -353,10 +381,9 @@ func outletStatus(_ *cobra.Command, args []string) error {
 		return pdu.ErrInvalidOutletID
 	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "   ")
+	sts.Outlets[idx].Print(os.Stdout, cfg.Format)
 
-	return enc.Encode(sts.Outlets[idx])
+	return nil
 }
 
 func main() {

@@ -14,16 +14,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/oapi-codegen/runtime"
 	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 )
-
-// ApiResponse defines model for ApiResponse.
-type ApiResponse struct {
-	// Error An optional error message
-	Error string `json:"error"`
-}
 
 // BreakerStatus defines model for BreakerStatus.
 type BreakerStatus struct {
@@ -38,20 +33,23 @@ type GroupStatus struct {
 	// AveragePower Average power [W]
 	AveragePower float32 `json:"avg_power"`
 	BreakerID    int     `json:"breaker_id"`
-	ID           int     `json:"id"`
-	Name         string  `json:"name"`
+
+	// Energy Energy [kWh]
+	Energy float32 `json:"energy"`
+	ID     int     `json:"id"`
+	Name   string  `json:"name"`
 
 	// PeakRMSCurrent Peak RMS current [A]
 	PeakRMSCurrent float32 `json:"peak_rms_current"`
+
+	// Power Power [VA]
+	Power float32 `json:"power"`
 
 	// TrueRMSCurrent True RMS current [A]
 	TrueRMSCurrent float32 `json:"true_rms_current"`
 
 	// TrueRMSVoltage True RMS voltage [V]
 	TrueRMSVoltage float32 `json:"true_rms_voltage"`
-
-	// VoltAmps Volt Amperes [VA]
-	VoltAmps float32 `json:"va"`
 }
 
 // Measurements defines model for Measurements.
@@ -59,17 +57,20 @@ type Measurements struct {
 	// AveragePower Average power [W]
 	AveragePower float32 `json:"avg_power"`
 
+	// Energy Energy [kWh]
+	Energy float32 `json:"energy"`
+
 	// PeakRMSCurrent Peak RMS current [A]
 	PeakRMSCurrent float32 `json:"peak_rms_current"`
+
+	// Power Power [VA]
+	Power float32 `json:"power"`
 
 	// TrueRMSCurrent True RMS current [A]
 	TrueRMSCurrent float32 `json:"true_rms_current"`
 
 	// TrueRMSVoltage True RMS voltage [V]
 	TrueRMSVoltage float32 `json:"true_rms_voltage"`
-
-	// VoltAmps Volt Amperes [VA]
-	VoltAmps float32 `json:"va"`
 }
 
 // OutletStatus defines model for OutletStatus.
@@ -77,23 +78,26 @@ type OutletStatus struct {
 	// AveragePower Average power [W]
 	AveragePower float32 `json:"avg_power"`
 	BreakerID    int     `json:"breaker_id"`
-	GroupID      int     `json:"group_id"`
-	ID           int     `json:"id"`
-	Locked       bool    `json:"locked"`
-	Name         string  `json:"name"`
+
+	// Energy Energy [kWh]
+	Energy  float32 `json:"energy"`
+	GroupID int     `json:"group_id"`
+	ID      int     `json:"id"`
+	Locked  bool    `json:"locked"`
+	Name    string  `json:"name"`
 
 	// PeakRMSCurrent Peak RMS current [A]
 	PeakRMSCurrent float32 `json:"peak_rms_current"`
-	State          bool    `json:"state"`
+
+	// Power Power [VA]
+	Power float32 `json:"power"`
+	State bool    `json:"state"`
 
 	// TrueRMSCurrent True RMS current [A]
 	TrueRMSCurrent float32 `json:"true_rms_current"`
 
 	// TrueRMSVoltage True RMS voltage [V]
 	TrueRMSVoltage float32 `json:"true_rms_voltage"`
-
-	// VoltAmps Volt Amperes [VA]
-	VoltAmps float32 `json:"va"`
 }
 
 // Status defines model for Status.
@@ -106,8 +110,11 @@ type Status struct {
 	// Temperature Temperature [C]
 	Temperature float32 `json:"temperature"`
 
-	// TotalKwh Total energy [kWh]
-	TotalKwh float32 `json:"total_kwh"`
+	// Timestamp Time of last update
+	Timestamp time.Time `json:"timestamp"`
+
+	// TotalEnergy Total energy [kWh]
+	TotalEnergy float32 `json:"total_energy"`
 }
 
 // Detailed defines model for detailed.
@@ -116,20 +123,11 @@ type Detailed = bool
 // Id defines model for id.
 type Id = string
 
-// BadRequest defines model for BadRequest.
-type BadRequest = ApiResponse
-
-// Forbidden defines model for Forbidden.
-type Forbidden = ApiResponse
-
-// InternalServerError defines model for InternalServerError.
-type InternalServerError = ApiResponse
-
-// NotFound defines model for NotFound.
-type NotFound = ApiResponse
-
-// Unauthorized defines model for Unauthorized.
-type Unauthorized = ApiResponse
+// Error defines model for Error.
+type Error struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 // LockOutletJSONBody defines parameters for LockOutlet.
 type LockOutletJSONBody = bool
@@ -686,10 +684,10 @@ type ClientWithResponsesInterface interface {
 type ClearMaximumCurrentsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON500      *InternalServerError
+	JSON400      *Error
+	JSON401      *Error
+	JSON403      *Error
+	JSON500      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -711,11 +709,11 @@ func (r ClearMaximumCurrentsResponse) StatusCode() int {
 type LockOutletResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON500      *InternalServerError
+	JSON400      *Error
+	JSON401      *Error
+	JSON403      *Error
+	JSON404      *Error
+	JSON500      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -737,11 +735,11 @@ func (r LockOutletResponse) StatusCode() int {
 type RebootOutletResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON500      *InternalServerError
+	JSON400      *Error
+	JSON401      *Error
+	JSON403      *Error
+	JSON404      *Error
+	JSON500      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -763,11 +761,11 @@ func (r RebootOutletResponse) StatusCode() int {
 type SwitchOutletResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON400      *BadRequest
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON404      *NotFound
-	JSON500      *InternalServerError
+	JSON400      *Error
+	JSON401      *Error
+	JSON403      *Error
+	JSON404      *Error
+	JSON500      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -790,9 +788,9 @@ type StatusResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *Status
-	JSON401      *Unauthorized
-	JSON403      *Forbidden
-	JSON500      *InternalServerError
+	JSON401      *Error
+	JSON403      *Error
+	JSON500      *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -818,9 +816,9 @@ type TemperatureResponse struct {
 		// Temperature Temperature [C]
 		Temperature float32 `json:"temperature"`
 	}
-	JSON401 *Unauthorized
-	JSON403 *Forbidden
-	JSON500 *InternalServerError
+	JSON401 *Error
+	JSON403 *Error
+	JSON500 *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -846,9 +844,9 @@ type WhoAmIResponse struct {
 		// Username The username of the current user
 		Username string `json:"username"`
 	}
-	JSON401 *Unauthorized
-	JSON403 *Forbidden
-	JSON500 *InternalServerError
+	JSON401 *Error
+	JSON403 *Error
+	JSON500 *Error
 }
 
 // Status returns HTTPResponse.Status
@@ -961,28 +959,28 @@ func ParseClearMaximumCurrentsResponse(rsp *http.Response) (*ClearMaximumCurrent
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1008,35 +1006,35 @@ func ParseLockOutletResponse(rsp *http.Response) (*LockOutletResponse, error) {
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1062,35 +1060,35 @@ func ParseRebootOutletResponse(rsp *http.Response) (*RebootOutletResponse, error
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1116,35 +1114,35 @@ func ParseSwitchOutletResponse(rsp *http.Response) (*SwitchOutletResponse, error
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
-		var dest BadRequest
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON400 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest NotFound
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1177,21 +1175,21 @@ func ParseStatusResponse(rsp *http.Response) (*StatusResponse, error) {
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1227,21 +1225,21 @@ func ParseTemperatureResponse(rsp *http.Response) (*TemperatureResponse, error) 
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1277,21 +1275,21 @@ func ParseWhoAmIResponse(rsp *http.Response) (*WhoAmIResponse, error) {
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
-		var dest Unauthorized
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest Forbidden
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
-		var dest InternalServerError
+		var dest Error
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -1612,18 +1610,13 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	return m
 }
 
-type BadRequestJSONResponse ApiResponse
-
-type ForbiddenJSONResponse ApiResponse
-
-type InternalServerErrorJSONResponse ApiResponse
-
-type NotFoundJSONResponse ApiResponse
+type ErrorJSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 type SuccessResponse struct {
 }
-
-type UnauthorizedJSONResponse ApiResponse
 
 type ClearMaximumCurrentsRequestObject struct {
 }
@@ -1639,7 +1632,7 @@ func (response ClearMaximumCurrents200Response) VisitClearMaximumCurrentsRespons
 	return nil
 }
 
-type ClearMaximumCurrents400JSONResponse struct{ BadRequestJSONResponse }
+type ClearMaximumCurrents400JSONResponse struct{ ErrorJSONResponse }
 
 func (response ClearMaximumCurrents400JSONResponse) VisitClearMaximumCurrentsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1648,7 +1641,10 @@ func (response ClearMaximumCurrents400JSONResponse) VisitClearMaximumCurrentsRes
 	return json.NewEncoder(w).Encode(response)
 }
 
-type ClearMaximumCurrents401JSONResponse struct{ UnauthorizedJSONResponse }
+type ClearMaximumCurrents401JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response ClearMaximumCurrents401JSONResponse) VisitClearMaximumCurrentsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1657,7 +1653,10 @@ func (response ClearMaximumCurrents401JSONResponse) VisitClearMaximumCurrentsRes
 	return json.NewEncoder(w).Encode(response)
 }
 
-type ClearMaximumCurrents403JSONResponse struct{ ForbiddenJSONResponse }
+type ClearMaximumCurrents403JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response ClearMaximumCurrents403JSONResponse) VisitClearMaximumCurrentsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1667,7 +1666,8 @@ func (response ClearMaximumCurrents403JSONResponse) VisitClearMaximumCurrentsRes
 }
 
 type ClearMaximumCurrents500JSONResponse struct {
-	InternalServerErrorJSONResponse
+	// Error An error message
+	Error string `json:"error"`
 }
 
 func (response ClearMaximumCurrents500JSONResponse) VisitClearMaximumCurrentsResponse(w http.ResponseWriter) error {
@@ -1693,7 +1693,7 @@ func (response LockOutlet200Response) VisitLockOutletResponse(w http.ResponseWri
 	return nil
 }
 
-type LockOutlet400JSONResponse struct{ BadRequestJSONResponse }
+type LockOutlet400JSONResponse struct{ ErrorJSONResponse }
 
 func (response LockOutlet400JSONResponse) VisitLockOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1702,7 +1702,10 @@ func (response LockOutlet400JSONResponse) VisitLockOutletResponse(w http.Respons
 	return json.NewEncoder(w).Encode(response)
 }
 
-type LockOutlet401JSONResponse struct{ UnauthorizedJSONResponse }
+type LockOutlet401JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response LockOutlet401JSONResponse) VisitLockOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1711,7 +1714,10 @@ func (response LockOutlet401JSONResponse) VisitLockOutletResponse(w http.Respons
 	return json.NewEncoder(w).Encode(response)
 }
 
-type LockOutlet403JSONResponse struct{ ForbiddenJSONResponse }
+type LockOutlet403JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response LockOutlet403JSONResponse) VisitLockOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1720,7 +1726,10 @@ func (response LockOutlet403JSONResponse) VisitLockOutletResponse(w http.Respons
 	return json.NewEncoder(w).Encode(response)
 }
 
-type LockOutlet404JSONResponse struct{ NotFoundJSONResponse }
+type LockOutlet404JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response LockOutlet404JSONResponse) VisitLockOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1730,7 +1739,8 @@ func (response LockOutlet404JSONResponse) VisitLockOutletResponse(w http.Respons
 }
 
 type LockOutlet500JSONResponse struct {
-	InternalServerErrorJSONResponse
+	// Error An error message
+	Error string `json:"error"`
 }
 
 func (response LockOutlet500JSONResponse) VisitLockOutletResponse(w http.ResponseWriter) error {
@@ -1755,7 +1765,7 @@ func (response RebootOutlet200Response) VisitRebootOutletResponse(w http.Respons
 	return nil
 }
 
-type RebootOutlet400JSONResponse struct{ BadRequestJSONResponse }
+type RebootOutlet400JSONResponse struct{ ErrorJSONResponse }
 
 func (response RebootOutlet400JSONResponse) VisitRebootOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1764,7 +1774,10 @@ func (response RebootOutlet400JSONResponse) VisitRebootOutletResponse(w http.Res
 	return json.NewEncoder(w).Encode(response)
 }
 
-type RebootOutlet401JSONResponse struct{ UnauthorizedJSONResponse }
+type RebootOutlet401JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response RebootOutlet401JSONResponse) VisitRebootOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1773,7 +1786,10 @@ func (response RebootOutlet401JSONResponse) VisitRebootOutletResponse(w http.Res
 	return json.NewEncoder(w).Encode(response)
 }
 
-type RebootOutlet403JSONResponse struct{ ForbiddenJSONResponse }
+type RebootOutlet403JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response RebootOutlet403JSONResponse) VisitRebootOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1782,7 +1798,10 @@ func (response RebootOutlet403JSONResponse) VisitRebootOutletResponse(w http.Res
 	return json.NewEncoder(w).Encode(response)
 }
 
-type RebootOutlet404JSONResponse struct{ NotFoundJSONResponse }
+type RebootOutlet404JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response RebootOutlet404JSONResponse) VisitRebootOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1792,7 +1811,8 @@ func (response RebootOutlet404JSONResponse) VisitRebootOutletResponse(w http.Res
 }
 
 type RebootOutlet500JSONResponse struct {
-	InternalServerErrorJSONResponse
+	// Error An error message
+	Error string `json:"error"`
 }
 
 func (response RebootOutlet500JSONResponse) VisitRebootOutletResponse(w http.ResponseWriter) error {
@@ -1818,7 +1838,7 @@ func (response SwitchOutlet200Response) VisitSwitchOutletResponse(w http.Respons
 	return nil
 }
 
-type SwitchOutlet400JSONResponse struct{ BadRequestJSONResponse }
+type SwitchOutlet400JSONResponse struct{ ErrorJSONResponse }
 
 func (response SwitchOutlet400JSONResponse) VisitSwitchOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1827,7 +1847,10 @@ func (response SwitchOutlet400JSONResponse) VisitSwitchOutletResponse(w http.Res
 	return json.NewEncoder(w).Encode(response)
 }
 
-type SwitchOutlet401JSONResponse struct{ UnauthorizedJSONResponse }
+type SwitchOutlet401JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response SwitchOutlet401JSONResponse) VisitSwitchOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1836,7 +1859,10 @@ func (response SwitchOutlet401JSONResponse) VisitSwitchOutletResponse(w http.Res
 	return json.NewEncoder(w).Encode(response)
 }
 
-type SwitchOutlet403JSONResponse struct{ ForbiddenJSONResponse }
+type SwitchOutlet403JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response SwitchOutlet403JSONResponse) VisitSwitchOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1845,7 +1871,10 @@ func (response SwitchOutlet403JSONResponse) VisitSwitchOutletResponse(w http.Res
 	return json.NewEncoder(w).Encode(response)
 }
 
-type SwitchOutlet404JSONResponse struct{ NotFoundJSONResponse }
+type SwitchOutlet404JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response SwitchOutlet404JSONResponse) VisitSwitchOutletResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1855,7 +1884,8 @@ func (response SwitchOutlet404JSONResponse) VisitSwitchOutletResponse(w http.Res
 }
 
 type SwitchOutlet500JSONResponse struct {
-	InternalServerErrorJSONResponse
+	// Error An error message
+	Error string `json:"error"`
 }
 
 func (response SwitchOutlet500JSONResponse) VisitSwitchOutletResponse(w http.ResponseWriter) error {
@@ -1882,7 +1912,7 @@ func (response Status200JSONResponse) VisitStatusResponse(w http.ResponseWriter)
 	return json.NewEncoder(w).Encode(response)
 }
 
-type Status401JSONResponse struct{ UnauthorizedJSONResponse }
+type Status401JSONResponse struct{ ErrorJSONResponse }
 
 func (response Status401JSONResponse) VisitStatusResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1891,7 +1921,10 @@ func (response Status401JSONResponse) VisitStatusResponse(w http.ResponseWriter)
 	return json.NewEncoder(w).Encode(response)
 }
 
-type Status403JSONResponse struct{ ForbiddenJSONResponse }
+type Status403JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response Status403JSONResponse) VisitStatusResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1901,7 +1934,8 @@ func (response Status403JSONResponse) VisitStatusResponse(w http.ResponseWriter)
 }
 
 type Status500JSONResponse struct {
-	InternalServerErrorJSONResponse
+	// Error An error message
+	Error string `json:"error"`
 }
 
 func (response Status500JSONResponse) VisitStatusResponse(w http.ResponseWriter) error {
@@ -1930,7 +1964,7 @@ func (response Temperature200JSONResponse) VisitTemperatureResponse(w http.Respo
 	return json.NewEncoder(w).Encode(response)
 }
 
-type Temperature401JSONResponse struct{ UnauthorizedJSONResponse }
+type Temperature401JSONResponse struct{ ErrorJSONResponse }
 
 func (response Temperature401JSONResponse) VisitTemperatureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1939,7 +1973,10 @@ func (response Temperature401JSONResponse) VisitTemperatureResponse(w http.Respo
 	return json.NewEncoder(w).Encode(response)
 }
 
-type Temperature403JSONResponse struct{ ForbiddenJSONResponse }
+type Temperature403JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response Temperature403JSONResponse) VisitTemperatureResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1949,7 +1986,8 @@ func (response Temperature403JSONResponse) VisitTemperatureResponse(w http.Respo
 }
 
 type Temperature500JSONResponse struct {
-	InternalServerErrorJSONResponse
+	// Error An error message
+	Error string `json:"error"`
 }
 
 func (response Temperature500JSONResponse) VisitTemperatureResponse(w http.ResponseWriter) error {
@@ -1978,7 +2016,7 @@ func (response WhoAmI200JSONResponse) VisitWhoAmIResponse(w http.ResponseWriter)
 	return json.NewEncoder(w).Encode(response)
 }
 
-type WhoAmI401JSONResponse struct{ UnauthorizedJSONResponse }
+type WhoAmI401JSONResponse struct{ ErrorJSONResponse }
 
 func (response WhoAmI401JSONResponse) VisitWhoAmIResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1987,7 +2025,10 @@ func (response WhoAmI401JSONResponse) VisitWhoAmIResponse(w http.ResponseWriter)
 	return json.NewEncoder(w).Encode(response)
 }
 
-type WhoAmI403JSONResponse struct{ ForbiddenJSONResponse }
+type WhoAmI403JSONResponse struct {
+	// Error An error message
+	Error string `json:"error"`
+}
 
 func (response WhoAmI403JSONResponse) VisitWhoAmIResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1997,7 +2038,8 @@ func (response WhoAmI403JSONResponse) VisitWhoAmIResponse(w http.ResponseWriter)
 }
 
 type WhoAmI500JSONResponse struct {
-	InternalServerErrorJSONResponse
+	// Error An error message
+	Error string `json:"error"`
 }
 
 func (response WhoAmI500JSONResponse) VisitWhoAmIResponse(w http.ResponseWriter) error {

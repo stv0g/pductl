@@ -23,8 +23,6 @@ var (
 
 type Server struct {
 	PDU
-
-	config *Config
 }
 
 func Handler(mux *http.ServeMux, p PDU, cfg *Config) http.Handler {
@@ -43,7 +41,7 @@ func Handler(mux *http.ServeMux, p PDU, cfg *Config) http.Handler {
 	}
 
 	mwAuth := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
-		if len(cfg.ACL) == 0 {
+		if len(cfg.ACL) == 0 || cfg.TLS.Cert == "" || cfg.TLS.Key == "" {
 			return f
 		}
 
@@ -65,26 +63,28 @@ func Handler(mux *http.ServeMux, p PDU, cfg *Config) http.Handler {
 	}
 
 	mwLogin := func(f nethttp.StrictHTTPHandlerFunc, operationID string) nethttp.StrictHTTPHandlerFunc {
-		var p PDU = p
-		if q, ok := p.(*Cached); ok {
-			p = q.PDU
-		}
-
 		q, ok := p.(LoginPDU)
 		if !ok {
 			return f
 		}
 
 		return func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (response interface{}, err error) {
-			err = q.WithLogin(cfg.Username, cfg.Password, func() {
-				response, err = f(ctx, w, r, request)
-			})
+			if response, err = f(ctx, w, r, request); err != nil {
+				if errors.Is(err, ErrLoginRequired) {
+					if err := q.WithLogin(cfg.Username, cfg.Password, func() {
+						response, err = f(ctx, w, r, request)
+					}); err != nil {
+						return nil, err
+					}
+				}
+			}
 
 			return response, err
 		}
 	}
 
-	si := api.NewStrictHandlerWithOptions(svr, []nethttp.StrictHTTPMiddlewareFunc{mwLog, mwAuth, mwLogin}, api.StrictHTTPServerOptions{
+	mws := []nethttp.StrictHTTPMiddlewareFunc{mwLog, mwAuth, mwLogin}
+	si := api.NewStrictHandlerWithOptions(svr, mws, api.StrictHTTPServerOptions{
 		RequestErrorHandlerFunc:  errorHandlerFunc,
 		ResponseErrorHandlerFunc: errorHandlerFunc,
 	})
@@ -110,7 +110,7 @@ func errorHandlerFuncFor(err error) http.HandlerFunc {
 			w.WriteHeader(http.StatusInternalServerError)
 		}
 
-		json.NewEncoder(w).Encode(api.ApiResponse{
+		json.NewEncoder(w).Encode(api.Error{
 			Error: err.Error(),
 		})
 	}
@@ -131,9 +131,7 @@ func (p *Server) Status(ctx context.Context, request api.StatusRequestObject) (a
 	sts, err := p.PDU.Status(detailed)
 	if err != nil {
 		return api.Status500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
+			Error: err.Error(),
 		}, nil
 	}
 
@@ -146,9 +144,7 @@ func (s *Server) Temperature(ctx context.Context, request api.TemperatureRequest
 	t, err := s.PDU.Temperature()
 	if err != nil {
 		return api.Temperature500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
+			Error: err.Error(),
 		}, nil
 	}
 
@@ -163,9 +159,7 @@ func (s *Server) WhoAmI(ctx context.Context, request api.WhoAmIRequestObject) (a
 	u, err := s.PDU.WhoAmI()
 	if err != nil {
 		return api.WhoAmI500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
+			Error: err.Error(),
 		}, nil
 	}
 
@@ -179,9 +173,7 @@ func (s *Server) WhoAmI(ctx context.Context, request api.WhoAmIRequestObject) (a
 func (s *Server) ClearMaximumCurrents(ctx context.Context, request api.ClearMaximumCurrentsRequestObject) (api.ClearMaximumCurrentsResponseObject, error) {
 	if err := s.PDU.ClearMaximumCurrents(); err != nil {
 		return &api.ClearMaximumCurrents500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
+			Error: err.Error(),
 		}, nil
 	}
 
@@ -194,22 +186,18 @@ func (s *Server) LockOutlet(ctx context.Context, request api.LockOutletRequestOb
 	if err := s.PDU.LockOutlet(request.Id, *request.Body); err != nil {
 		if errors.Is(err, ErrNotFound) {
 			return &api.LockOutlet404JSONResponse{
-				NotFoundJSONResponse: api.NotFoundJSONResponse{
-					Error: err.Error(),
-				},
+				Error: err.Error(),
 			}, nil
 		}
 
 		return &api.LockOutlet500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
+			Error: err.Error(),
 		}, nil
 	}
 
 	if request.Body == nil {
 		return &api.LockOutlet400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
+			ErrorJSONResponse: api.ErrorJSONResponse{
 				Error: "Missing request body",
 			},
 		}, nil
@@ -217,9 +205,7 @@ func (s *Server) LockOutlet(ctx context.Context, request api.LockOutletRequestOb
 
 	if err := s.PDU.LockOutlet(request.Id, *request.Body); err != nil {
 		return &api.LockOutlet500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
+			Error: err.Error(),
 		}, nil
 	}
 
@@ -231,9 +217,7 @@ func (s *Server) LockOutlet(ctx context.Context, request api.LockOutletRequestOb
 func (s *Server) RebootOutlet(ctx context.Context, request api.RebootOutletRequestObject) (api.RebootOutletResponseObject, error) {
 	if err := s.PDU.RebootOutlet(request.Id); err != nil {
 		return &api.RebootOutlet500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
+			Error: err.Error(),
 		}, nil
 	}
 
@@ -245,7 +229,7 @@ func (s *Server) RebootOutlet(ctx context.Context, request api.RebootOutletReque
 func (s *Server) SwitchOutlet(ctx context.Context, request api.SwitchOutletRequestObject) (api.SwitchOutletResponseObject, error) {
 	if request.Body == nil {
 		return &api.SwitchOutlet400JSONResponse{
-			BadRequestJSONResponse: api.BadRequestJSONResponse{
+			ErrorJSONResponse: api.ErrorJSONResponse{
 				Error: "Missing request body",
 			},
 		}, nil
@@ -253,9 +237,7 @@ func (s *Server) SwitchOutlet(ctx context.Context, request api.SwitchOutletReque
 
 	if err := s.PDU.SwitchOutlet(request.Id, *request.Body); err != nil {
 		return &api.SwitchOutlet500JSONResponse{
-			InternalServerErrorJSONResponse: api.InternalServerErrorJSONResponse{
-				Error: err.Error(),
-			},
+			Error: err.Error(),
 		}, nil
 	}
 

@@ -29,11 +29,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Status'
         401:
-          $ref: '#/components/responses/Unauthorized'
+          $ref: '#/components/responses/Error'
         403:
-          $ref: '#/components/responses/Forbidden'
+          $ref: '#/components/responses/Error'
         500:
-          $ref: '#/components/responses/InternalServerError'
+          $ref: '#/components/responses/Error'
           
   /temperature:
     get:
@@ -52,11 +52,11 @@ paths:
                     type: number
                     description: "Temperature [C]"
         401:
-          $ref: '#/components/responses/Unauthorized'
+          $ref: '#/components/responses/Error'
         403:
-          $ref: '#/components/responses/Forbidden'
+          $ref: '#/components/responses/Error'
         500:
-          $ref: '#/components/responses/InternalServerError'
+          $ref: '#/components/responses/Error'
 
   /whoami:
     get:
@@ -75,11 +75,11 @@ paths:
                     type: string
                     description: The username of the current user
         401:
-          $ref: '#/components/responses/Unauthorized'
+          $ref: '#/components/responses/Error'
         403:
-          $ref: '#/components/responses/Forbidden'
+          $ref: '#/components/responses/Error'
         500:
-          $ref: '#/components/responses/InternalServerError'
+          $ref: '#/components/responses/Error'
 
   /clear:
     post:
@@ -89,13 +89,13 @@ paths:
         200:
           $ref: '#/components/responses/Success'
         400:
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/Error'
         401:
-          $ref: '#/components/responses/Unauthorized'
+          $ref: '#/components/responses/Error'
         403:
-          $ref: '#/components/responses/Forbidden'
+          $ref: '#/components/responses/Error'
         500:
-          $ref: '#/components/responses/InternalServerError'
+          $ref: '#/components/responses/Error'
 
   /outlet/{id}/state:
     parameters:
@@ -115,15 +115,15 @@ paths:
         200:
           $ref: '#/components/responses/Success'
         400:
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/Error'
         401:
-          $ref: '#/components/responses/Unauthorized'
+          $ref: '#/components/responses/Error'
         403:
-          $ref: '#/components/responses/Forbidden'
+          $ref: '#/components/responses/Error'
         404:
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/Error'
         500:
-          $ref: '#/components/responses/InternalServerError'
+          $ref: '#/components/responses/Error'
 
   /outlet/{id}/lock:
     parameters:
@@ -143,15 +143,15 @@ paths:
         200:
           $ref: '#/components/responses/Success'
         400:
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/Error'
         401:
-          $ref: '#/components/responses/Unauthorized'
+          $ref: '#/components/responses/Error'
         403:
-          $ref: '#/components/responses/Forbidden'
+          $ref: '#/components/responses/Error'
         404:
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/Error'
         500:
-          $ref: '#/components/responses/InternalServerError'
+          $ref: '#/components/responses/Error'
 
   /outlet/{id}/reboot:
     parameters:
@@ -165,55 +165,32 @@ paths:
         200:
           $ref: '#/components/responses/Success'
         400:
-          $ref: '#/components/responses/BadRequest'
+          $ref: '#/components/responses/Error'
         401:
-          $ref: '#/components/responses/Unauthorized'
+          $ref: '#/components/responses/Error'
         403:
-          $ref: '#/components/responses/Forbidden'
+          $ref: '#/components/responses/Error'
         404:
-          $ref: '#/components/responses/NotFound'
+          $ref: '#/components/responses/Error'
         500:
-          $ref: '#/components/responses/InternalServerError'
+          $ref: '#/components/responses/Error'
 
 components:
   responses:
     Success:
       description: Success
 
-    BadRequest:
+    Error:
       description: Bad Request
       content:
         application/json:
           schema:
-            $ref: '#/components/schemas/ApiResponse'
-
-    Unauthorized:
-      description: Unauthorized
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ApiResponse'
-
-    Forbidden:
-      description: Forbidden
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ApiResponse'
-
-    NotFound:
-      description: Not Found
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ApiResponse'
-
-    InternalServerError:
-      description: Internal Server Error
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ApiResponse'
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: string
+                description: An error message
 
   parameters:
     id:
@@ -236,12 +213,16 @@ components:
   schemas:
     Status:
       type: object
-      required: [temperature, total_kwh, breakers, groups, outlets, switches]
+      required: [temperature, timestamp, total_energy, breakers, groups, outlets, switches]
       properties:
+        timestamp:
+          description: Time of last update
+          x-go-type: time.Time
+          type: string
         temperature:
           description: "Temperature [C]"
           type: number
-        total_kwh:
+        total_energy:
           description: "Total energy [kWh]"
           type: number
 
@@ -341,20 +322,15 @@ components:
           description: "Average power [W]"
           type: number
           minimum: 0
-        va:
-          x-go-name: VoltAmps
-          description: "Volt Amperes [VA]"
+        power:
+          description: "Power [VA]"
           type: number
           minimum: 0
-      required: [true_rms_current, peak_rms_current, true_rms_voltage, avg_power, va]
-
-    ApiResponse:
-      type: object
-      required: [error]
-      properties:
-        error:
-          type: string
-          description: An optional error message
+        energy:
+          description: "Energy [kWh]"
+          type: number
+          minimum: 0
+      required: [true_rms_current, peak_rms_current, true_rms_voltage, avg_power, power, energy]
         
   securitySchemes:
     BasicAuth:

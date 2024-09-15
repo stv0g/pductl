@@ -13,21 +13,22 @@ import (
 )
 
 type Config struct {
-	Listen   string `mapstructure:"listen"`
-	Address  string `mapstructure:"address"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
+	Listen       string        `mapstructure:"listen"`
+	Address      string        `mapstructure:"address"`
+	Username     string        `mapstructure:"username"`
+	Password     string        `mapstructure:"password"`
+	PollInterval time.Duration `mapstructure:"poll_interval"`
+	Format       string        `mapstructure:"format"`
+	Metrics      bool          `mapstructure:"metrics"`
 
-	TTL time.Duration `mapstructure:"ttl"`
-
-	TLS *struct {
+	TLS struct {
 		CACert   string `mapstructure:"cacert"`
 		Cert     string `mapstructure:"cert"`
 		Key      string `mapstructure:"key"`
 		Insecure bool   `mapstructure:"insecure"`
-	} `mapstructure:"tls,omitempty"`
+	} `mapstructure:"tls"`
 
-	ACL AccessControlList `mapstructure:"acl,omitempty"`
+	ACL AccessControlList `mapstructure:"acl"`
 }
 
 func ParseConfig(flags *flag.FlagSet) (*Config, error) {
@@ -35,8 +36,9 @@ func ParseConfig(flags *flag.FlagSet) (*Config, error) {
 
 	v.SetDefault("username", "admin")
 	v.SetDefault("password", "admin")
-	v.SetDefault("ttl", DefaultTTL)
 	v.SetDefault("listen", ":8080")
+	v.SetDefault("format", "pretty-rounded")
+	v.SetDefault("metrics", true)
 
 	v.SetConfigType("yaml")
 
@@ -57,15 +59,18 @@ func ParseConfig(flags *flag.FlagSet) (*Config, error) {
 	for _, key := range []string{
 		"listen",
 		"address",
+		"format",
 		"username",
 		"password",
-		"ttl",
+		"poll_interval",
 		"tls.cacert",
 		"tls.cert",
 		"tls.key",
 		"tls.insecure",
 	} {
 		flag := strings.ReplaceAll(key, ".", "-")
+		flag = strings.ReplaceAll(flag, "_", "-")
+
 		v.BindPFlag(key, flags.Lookup(flag))
 	}
 

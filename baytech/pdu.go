@@ -14,8 +14,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 	"sync"
+	"time"
 
 	"go.bug.st/serial"
 
@@ -31,16 +31,14 @@ const (
 	NumGroups   = 4
 	NumSwitches = 2
 
-	promptReady    = "MMP-14>"
-	promptPassword = "Enter Password: "
-	promptUsername = "Enter user name: "
+	promptReady           = "MMP-14>"
+	promptPassword        = "Enter Password: "
+	promptUsername        = "Enter user name: "
 	promptInvalidPassword = "Invalid user/password!"
 )
 
 var (
-	ErrDecode          = errors.New("failed to decode")
-	ErrLoginRequired   = errors.New("login required")
-	ErrInvalidPassword = errors.New("invalid password")
+	ErrDecode = errors.New("failed to decode")
 
 	reTemperature   = regexp.MustCompile(`(?m)^Int\. Temp:\s*([0-9\.]+)\s*F`)
 	reWhoami        = regexp.MustCompile(`(?m)^Current User:\s*([A-Za-z0-9-]+)\s*$`)
@@ -56,7 +54,7 @@ type OutletID string
 type PDU struct {
 	conn    io.ReadWriteCloser
 	timeout time.Duration
-	mu sync.Mutex
+	mu      sync.Mutex
 	muLogin sync.Mutex
 }
 
@@ -144,7 +142,9 @@ func (p *PDU) RebootOutlet(idStr string) error {
 }
 
 func (p *PDU) Status(detailed bool) (*pdu.Status, error) {
-	sts := &pdu.Status{}
+	sts := &pdu.Status{
+		Timestamp: time.Now(),
+	}
 
 	out, err := p.execute("Status")
 	if err != nil {
@@ -157,12 +157,12 @@ func (p *PDU) Status(detailed bool) (*pdu.Status, error) {
 		return sts, fmt.Errorf("%w: total Kwh", ErrDecode)
 	}
 
-	kwh, err := strconv.ParseInt(m[1], 10, 64)
+	totalEnergy, err := strconv.ParseInt(m[1], 10, 64)
 	if err != nil {
 		return sts, fmt.Errorf("%w: total KWh %w", ErrDecode, err)
 	}
 
-	sts.TotalKwh = float32(kwh)
+	sts.TotalEnergy = float32(totalEnergy)
 
 	// Temperature
 	m = reTemperature.FindStringSubmatch(out)
@@ -252,7 +252,7 @@ func (p *PDU) Status(detailed bool) (*pdu.Status, error) {
 			return sts, fmt.Errorf("%w group average power: %w", ErrDecode, err)
 		}
 
-		va, err := strconv.ParseFloat(g[6], 64)
+		power, err := strconv.ParseFloat(g[6], 64)
 		if err != nil {
 			return sts, fmt.Errorf("%w group VA: %w", ErrDecode, err)
 		}
@@ -261,7 +261,7 @@ func (p *PDU) Status(detailed bool) (*pdu.Status, error) {
 		group.PeakRMSCurrent = float32(curPeak)
 		group.TrueRMSVoltage = float32(volt)
 		group.AveragePower = float32(avgPower)
-		group.VoltAmps = float32(va)
+		group.Power = float32(power)
 
 		sts.Groups = append(sts.Groups, group)
 	}
@@ -274,7 +274,6 @@ func (p *PDU) Status(detailed bool) (*pdu.Status, error) {
 
 	return sts, nil
 }
-
 
 func (p *PDU) WhoAmI() (string, error) {
 	out, err := p.execute("Whoami")
@@ -290,7 +289,7 @@ func (p *PDU) WhoAmI() (string, error) {
 	return strings.TrimSpace(m[1]), err
 }
 
-func (p *PDU) WithLogin(username, password string, cb func()) error {
+func (p *PDU) WithLogin(username, password string, cb func()) (err error) {
 	p.muLogin.Lock()
 	defer p.muLogin.Unlock()
 
@@ -309,7 +308,7 @@ func (p *PDU) WithLogin(username, password string, cb func()) error {
 
 func (p *PDU) Login(username, password string) error {
 	if user, err := p.WhoAmI(); err != nil {
-		if !errors.Is(err, ErrLoginRequired) {
+		if !errors.Is(err, pdu.ErrLoginRequired) {
 			return err
 		}
 	} else if user != username {
@@ -351,7 +350,7 @@ func (p *PDU) Login(username, password string) error {
 
 		case strings.HasSuffix(str, promptInvalidPassword):
 			if sentUsername && sentPassword {
-				return false, "", ErrInvalidPassword
+				return false, "", pdu.ErrInvalidPassword
 			}
 		}
 
@@ -374,7 +373,6 @@ func (p *PDU) Logout() error {
 	_, err := p.execute("Logout")
 	return err
 }
-
 
 func (p *PDU) statusOutlets() ([]pdu.OutletStatus, error) {
 	outlets := []pdu.OutletStatus{}
@@ -432,7 +430,7 @@ func (p *PDU) statusOutlets() ([]pdu.OutletStatus, error) {
 			return nil, fmt.Errorf("%w group average power: %w", ErrDecode, err)
 		}
 
-		va, err := strconv.ParseFloat(o[6], 64)
+		power, err := strconv.ParseFloat(o[6], 64)
 		if err != nil {
 			return nil, fmt.Errorf("%w group VA: %w", ErrDecode, err)
 		}
@@ -441,7 +439,7 @@ func (p *PDU) statusOutlets() ([]pdu.OutletStatus, error) {
 		outlet.PeakRMSCurrent = float32(curPeak)
 		outlet.TrueRMSVoltage = float32(volt)
 		outlet.AveragePower = float32(avgPower)
-		outlet.VoltAmps = float32(va)
+		outlet.Power = float32(power)
 
 		outlets = append(outlets, outlet)
 	}
@@ -491,8 +489,8 @@ func (p *PDU) execute(cmd string, args ...any) (string, error) {
 		str += buf
 
 		// There is no prompt after logout
-		if sent == true && cmd == "Logout" {
-			if str == cmd {
+		if sent && cmd == "Logout" {
+			if str == cmd+"\r\r\n" {
 				time.Sleep(500 * time.Millisecond)
 				return true, "", nil
 			}
@@ -509,7 +507,7 @@ func (p *PDU) execute(cmd string, args ...any) (string, error) {
 
 				return true, str, nil
 			}
-			
+
 			if err := p.send(cmd); err != nil {
 				return false, "", err
 			}
@@ -518,7 +516,7 @@ func (p *PDU) execute(cmd string, args ...any) (string, error) {
 			str = ""
 
 		case strings.HasSuffix(str, promptUsername), strings.HasSuffix(str, promptPassword):
-			return false, "", ErrLoginRequired 
+			return false, "", pdu.ErrLoginRequired
 		}
 
 		return false, "", nil
