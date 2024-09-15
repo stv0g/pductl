@@ -314,7 +314,7 @@ func status(cmd *cobra.Command, args []string) error {
 	}
 
 	switch use {
-	case "status":
+	case "all":
 		sts.Print(os.Stdout, cfg.Format)
 	case "outlets", "outlet":
 		sts.PrintOutlets(os.Stdout, cfg.Format)
