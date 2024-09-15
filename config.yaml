@@ -1,4 +1,6 @@
 ---
+# SPDX-FileCopyrightText: 2024 Steffen Vogel <post@steffenvogel.de>
+# SPDX-License-Identifier: Apache-2.0
 
 # Address or path of PDU
 address: tcp://ram.rtr.0l.de:4142

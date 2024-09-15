@@ -1,4 +1,6 @@
 #!/bin/env bash
+# SPDX-FileCopyrightText: 2024 Steffen Vogel <post@steffenvogel.de>
+# SPDX-License-Identifier: Apache-2.0
 
 rm -rf certs
 mkdir certs
