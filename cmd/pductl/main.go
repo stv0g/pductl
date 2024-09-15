@@ -54,29 +54,10 @@ var (
 		Short:              "Show PDU status",
 		RunE:               status,
 		Args:               cobra.MaximumNArgs(1),
+		ValidArgs:          []string{"outlets", "breakers", "groups"},
+		ArgAliases:         []string{"outlet", "group", "breaker", "grp", "brk"},
 		PersistentPreRunE:  preRun,
 		PersistentPostRunE: postRun,
-	}
-
-	statusBreakerCmd = &cobra.Command{
-		Use:     "breakers",
-		Aliases: []string{"breaker", "brk"},
-		Short:   "Show PDU breaker status",
-		RunE:    status,
-	}
-
-	statusGroupCmd = &cobra.Command{
-		Use:     "groups",
-		Aliases: []string{"group", "grp"},
-		Short:   "Show PDU group status",
-		RunE:    status,
-	}
-
-	statusOutletsCmd = &cobra.Command{
-		Use:     "outlets",
-		Aliases: []string{"outlet"},
-		Short:   "Show PDU outlet status",
-		RunE:    status,
 	}
 
 	userCmd = &cobra.Command{
@@ -119,43 +100,46 @@ var (
 	}
 
 	outletRebootCmd = &cobra.Command{
-		Use:   "reboot OUTLET",
-		Short: "Reboot an outlet",
-		RunE:  outletReboot,
-		Args:  cobra.ExactArgs(1),
+		Use:               "reboot OUTLET",
+		Short:             "Reboot an outlet",
+		RunE:              outletReboot,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: outletCompletion,
 	}
 
 	outletSwitchCmd = &cobra.Command{
-		Use:   "switch OUTLET STATE",
-		Short: "Switch an outlet on/off",
-		RunE:  outletSwitch,
-		Args:  cobra.ExactArgs(2),
+		Use:               "switch OUTLET STATE",
+		Short:             "Switch an outlet on/off",
+		RunE:              outletSwitch,
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: outletCompletionSwitch,
 	}
 
 	outletLockCmd = &cobra.Command{
-		Use:   "lock OUTLET STATE",
-		Short: "Lock or unlock an outlet",
-		RunE:  outletLock,
-		Args:  cobra.ExactArgs(2),
+		Use:               "lock OUTLET STATE",
+		Short:             "Lock or unlock an outlet",
+		RunE:              outletLock,
+		Args:              cobra.ExactArgs(2),
+		ValidArgsFunction: outletCompletionSwitch,
 	}
 
 	outletStatusCmd = &cobra.Command{
-		Use:   "status OUTLET",
-		Short: "Get status of outlet",
-		RunE:  outletStatus,
-		Args:  cobra.ExactArgs(1),
+		Use:               "status OUTLET",
+		Short:             "Get status of outlet",
+		RunE:              outletStatus,
+		Args:              cobra.ExactArgs(1),
+		ValidArgsFunction: outletCompletion,
 	}
 )
 
 func init() {
 	rootCmd.AddCommand(statusCmd, tempCmd, clearCmd, outletCmd, userCmd, genDocs)
 	userCmd.AddCommand(whoAmICmd)
-	statusCmd.AddCommand(statusBreakerCmd, statusGroupCmd, statusOutletsCmd)
 	outletCmd.AddCommand(outletLockCmd, outletRebootCmd, outletSwitchCmd, outletStatusCmd)
 
 	pf := rootCmd.PersistentFlags()
 	pf.String("config", "", "Path to YAML-formatted configuration file")
-	pf.String("address", "tcp://10.208.1.1:4141", "Address for PDU communication")
+	pf.String("address", "http://localhost:8080", "Address for PDU communication")
 	pf.String("format", "pretty-rounded", "Output format")
 	pf.String("username", "admin", "Username")
 	pf.String("password", "admin", "password")
@@ -166,6 +150,45 @@ func init() {
 
 	pf = statusCmd.PersistentFlags()
 	pf.BoolVar(&detailed, "detailed", false, "Show detailed status")
+}
+
+func outletCompletionSwitch(cmd *cobra.Command, args []string, toComplete string) (comps []string, _ cobra.ShellCompDirective) {
+	if len(args) == 1 {
+		return []string{"on", "off"}, cobra.ShellCompDirectiveNoFileComp
+	} else {
+		return outletCompletion(cmd, args, toComplete)
+	}
+}
+
+func outletCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+	if len(args) == 0 {
+		return outletIDs(), cobra.ShellCompDirectiveNoFileComp
+	}
+
+	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
+func outletIDs() (ids []string) {
+	var err error
+
+	if cfg, err = pdu.ParseConfig(nil); err != nil {
+		return nil
+	}
+
+	if p, err = newPDU(cfg); err != nil {
+		return nil
+	}
+
+	sts, err := p.Status(true)
+	if err != nil {
+		return nil
+	}
+
+	for _, outlet := range sts.Outlets {
+		ids = append(ids, outlet.Name, fmt.Sprint(outlet.ID))
+	}
+
+	return ids
 }
 
 func preRun(cmd *cobra.Command, args []string) (err error) {
@@ -276,7 +299,12 @@ func parseState(s string) (state bool, err error) {
 }
 
 func status(cmd *cobra.Command, args []string) error {
-	if cmd.Use == "outlets" {
+	use := "all"
+	if len(args) > 0 {
+		use = args[0]
+	}
+
+	if use == "outlets" || use == "outlet" {
 		detailed = true
 	}
 
@@ -285,14 +313,14 @@ func status(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("Failed to get status: %w", err)
 	}
 
-	switch cmd.Use {
+	switch use {
 	case "status":
 		sts.Print(os.Stdout, cfg.Format)
-	case "outlets":
+	case "outlets", "outlet":
 		sts.PrintOutlets(os.Stdout, cfg.Format)
-	case "groups":
+	case "groups", "group", "grp":
 		sts.PrintGroups(os.Stdout, cfg.Format)
-	case "breakers":
+	case "breakers", "breaker", "brk":
 		sts.PrintBreakers(os.Stdout, cfg.Format)
 	}
 

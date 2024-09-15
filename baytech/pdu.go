@@ -46,7 +46,7 @@ var (
 	reStatusSwitch  = regexp.MustCompile(`(?m)^Switch 1: (Open|Closed) 2: (Open|Closed)`)
 	reStatusBreaker = regexp.MustCompile(`(?m)^\|\s*(CKT[1-2]|Input [A-Z]|Circuit M[1-4])\s*\|\s*([0-9\.]+)\s+Amps\s*\|\s*([0-9\.]+)\s+Amps\s*\|\s*$`)
 	reStatusGroup   = regexp.MustCompile(`(?m)^\|\s*(CKT[1-2]|Input [A-Z]|Circuit M[1-4])\s*\|\s*([0-9\.]+)\s+Amps\s*\|\s*([0-9\.]+)\s+Amps\s*\|\s*([0-9\.]+)\s+Volts\s*\|\s*([0-9\.]+)\s+Watts\s*\|\s*([0-9\.]+)\s+VA\s*\|`)
-	reOstatusOutlet = regexp.MustCompile(`(?m)^\|\s*([A-Za-z0-9- ]+?)\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+V\s*\|\s*([0-9\.]+)\s+W\s*\|\s*([0-9\.]+)\s+VA\s*\|\s*(On|Off)\s*?(Locked|)\s*\|`)
+	reOstatusOutlet = regexp.MustCompile(`(?m)^\|\s*([A-Za-z0-9- /]+?)\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+A\s*\|\s*([0-9\.]+)\s+V\s*\|\s*([0-9\.]+)\s+W\s*\|\s*([0-9\.]+)\s+VA\s*\|\s*(On|Off)\s*?(Locked|)\s*\|`)
 )
 
 type OutletID string

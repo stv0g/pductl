@@ -42,9 +42,29 @@ func ParseConfig(flags *flag.FlagSet) (*Config, error) {
 
 	v.SetConfigType("yaml")
 
-	if f := flags.Lookup("config"); f != nil && f.Value.String() != "" {
-		cfgFile := f.Value.String()
-		v.SetConfigFile(cfgFile)
+	if flags != nil {
+		for _, key := range []string{
+			"listen",
+			"address",
+			"format",
+			"username",
+			"password",
+			"poll_interval",
+			"tls.cacert",
+			"tls.cert",
+			"tls.key",
+			"tls.insecure",
+		} {
+			flag := strings.ReplaceAll(key, ".", "-")
+			flag = strings.ReplaceAll(flag, "_", "-")
+
+			v.BindPFlag(key, flags.Lookup(flag))
+		}
+
+		if f := flags.Lookup("config"); f != nil && f.Value.String() != "" {
+			cfgFile := f.Value.String()
+			v.SetConfigFile(cfgFile)
+		}
 	} else {
 		v.SetConfigName("config")
 
@@ -53,29 +73,13 @@ func ParseConfig(flags *flag.FlagSet) (*Config, error) {
 		v.AddConfigPath(".")
 	}
 
-	v.SetEnvPrefix("pdud")
+	v.SetEnvPrefix("pdu")
 	v.AutomaticEnv()
 
-	for _, key := range []string{
-		"listen",
-		"address",
-		"format",
-		"username",
-		"password",
-		"poll_interval",
-		"tls.cacert",
-		"tls.cert",
-		"tls.key",
-		"tls.insecure",
-	} {
-		flag := strings.ReplaceAll(key, ".", "-")
-		flag = strings.ReplaceAll(flag, "_", "-")
-
-		v.BindPFlag(key, flags.Lookup(flag))
-	}
-
 	if err := v.ReadInConfig(); err != nil { // Handle errors reading the config file
-		return nil, fmt.Errorf("fatal error config file: %w", err)
+		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+			return nil, fmt.Errorf("fatal error config file: %w", err)
+		}
 	}
 
 	c := &Config{}
